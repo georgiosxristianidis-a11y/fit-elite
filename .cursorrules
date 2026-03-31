@@ -1,0 +1,18 @@
+# Athlete Pro — Antigravity Protocol
+
+## Project Context
+- [cite_start]Stack: Vanilla JS, IndexedDB, Node.js, Supabase. [cite: 4, 5]
+- [cite_start]Design: Vantablack Luxury (#0a0a0f). [cite: 6]
+
+## Architecture Rules
+- [cite_start]Store/View Pattern: Logic in `.store.js`, DOM in `.view.js`. [cite: 6]
+- Sync: Outbox pattern with exponential backoff (SyncStore).
+- Idempotency: Always UPSERT to Supabase by record ID.
+
+## iOS Safari & PWA
+- No Background Sync: Use `visibilitychange` + `online` triggers.
+- Persistent Storage: Call `navigator.storage.persist()` on app start.
+- [cite_start]Haptics: Use `navigator.vibrate?.([15, 50, 15])` for feedback. [cite: 7]
+
+## Testing Standards
+- 100% pass rate required for Offline Flow (Block 3) and Data Integrity (Block 8).

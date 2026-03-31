@@ -1,0 +1,28 @@
+{
+  "name": "fit-elite-pwa",
+  "version": "1.0.0",
+  "description": "Fit Elite - Progressive Web App Workout Tracker",
+  "type": "module",
+  "scripts": {
+    "dev": "http-server -p 3000 -c-1 --silent",
+    "build": "echo 'No build step - static PWA'",
+    "preview": "http-server -p 8000 -c-1 --silent",
+    "deploy": "vercel --prod",
+    "deploy:preview": "vercel",
+    "git:commit": "git add -A && git commit -m",
+    "git:push": "git push"
+  },
+  "keywords": [
+    "fitness",
+    "workout",
+    "tracker",
+    "pwa",
+    "vanilla-js"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "http-server": "^14.1.1",
+    "vercel": "^39.0.0"
+  }
+}

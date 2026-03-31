@@ -1,0 +1,23 @@
+{
+  "suite_version": "1.0",
+  "critical_paths": [
+    {
+      "id": "3.3",
+      "name": "iOS Visibility Sync",
+      "trigger": "visibilitychange",
+      "expected_action": "flush()",
+      "risk": "High (Safari process kill)"
+    },
+    {
+      "id": "7.4",
+      "name": "Double-tap Edit",
+      "interaction": "double-click < 400ms",
+      "expected_state": "editable"
+    }
+  ],
+  "style_tokens": {
+    "island_green": "#00c86e",
+    "island_offline": "#f472b6",
+    "transition": "0.38s cubic-bezier"
+  }
+}

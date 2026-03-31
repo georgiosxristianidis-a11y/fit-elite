@@ -1,0 +1,286 @@
+# Fit Elite PWA — Antigravity Test Suite
+# Sync Layer + iOS Safari Compatibility
+# Version: 1.0 | Phase 5
+
+---
+
+## CONTEXT
+
+You are testing **Fit Elite** — a Progressive Web App (PWA) workout tracker.
+Stack: Vanilla JS, Web Components, IndexedDB, Express/Node.js, Supabase.
+
+The app is **local-first**: IndexedDB is the single source of truth.
+Supabase sync happens in the background via an **Outbox Pattern**.
+
+Base URL: http://localhost:3000
+Supabase project: https://hkpuxvqzhcwgtbyjyinx.supabase.co
+
+---
+
+## ARCHITECTURE TO VALIDATE
+
+```
+User action → session.save() → IndexedDB → sync_queue → flush() → Supabase
+                                                ↑
+                              triggers: visibilitychange | online | 10min interval
+```
+
+Recovery Code flow:
+```
+Profile → copy XXXX-XXXX-XXXX → new device → enter code → restore() → pull from Supabase
+```
+
+---
+
+## TEST SUITE
+
+### BLOCK 1 — App Load & Initialization
+
+1.1 Load app on iOS Safari (simulated)
+    EXPECT: app loads without errors in console
+    EXPECT: Dynamic Island capsule visible at top
+    EXPECT: `fit_elite_device_id` written to localStorage on first load
+    EXPECT: Recovery Code format XXXX-XXXX-XXXX visible in Profile → Device
+
+1.2 Verify IndexedDB stores created
+    EXPECT: stores present: `workouts`, `core_usage`, `sync_queue`
+    EXPECT: `sync_queue` is empty on fresh install
+
+1.3 Verify navigator.storage.persist() called
+    EXPECT: `navigator.storage.persist()` invoked at startup
+    EXPECT: no quota exceeded warnings
+
+---
+
+### BLOCK 2 — Complete Workout Flow
+
+2.1 Start a Push A workout
+    ACTION: tap Train tab → tap Push chip → tap Push A card → tap Start
+    EXPECT: session state = TRAINING
+    EXPECT: Dynamic Island shows: dot (green pulse) · 00:00 · 0/4
+    EXPECT: island collapsed by default, expands on tap
+
+2.2 Log 4 sets on Bench Press
+    ACTION: enter kg=90, reps=8, rpe=8 → tap Finish Set × 4
+    EXPECT: set rows progress: Locked → Active → Done/PR
+    EXPECT: set counter in island: 1/4 → 2/4 → 3/4 → 4/4
+    EXPECT: 4/4 counter color = #00c86e (green)
+    EXPECT: rest timer auto-starts after each set (active state, green ring)
+    EXPECT: after 4/4 — auto-advance to next exercise after 600ms
+
+2.3 Complete full session (Training → Core → Stretch → Summary)
+    ACTION: complete all exercises → session auto-advances to Core
+    EXPECT: session state transitions: TRAINING → CORE → STRETCH → SUMMARY
+    EXPECT: progress line in island: ~75% at CORE start, ~90% at STRETCH, 100% at SUMMARY
+    EXPECT: Core selected = least-used of A/B/C (check core_usage in IndexedDB)
+
+2.4 Save workout
+    ACTION: tap Save in Summary modal
+    EXPECT: workout written to IndexedDB `workouts` store
+    EXPECT: record added to `sync_queue` store
+    EXPECT: sync_queue item format: { id, action: 'UPSERT', table: 'workouts', payload, created_at }
+    EXPECT: sync status dot in Profile changes to 'syncing' then 'synced'
+    EXPECT: NO data written to Supabase before Save is tapped
+
+2.5 Verify Supabase received the workout
+    EXPECT: row present in Supabase workouts table with correct device_id
+    EXPECT: sets column is valid JSONB array
+    EXPECT: updated_at auto-set by trigger
+    EXPECT: sync_queue cleared after successful HTTP 200
+
+---
+
+### BLOCK 3 — Offline Behavior (iOS Safari Critical)
+
+3.1 Go offline before Save
+    ACTION: disable network → complete workout → tap Save
+    EXPECT: workout saved to IndexedDB ✓
+    EXPECT: item added to sync_queue ✓
+    EXPECT: Dynamic Island dot = pink/rose (#f472b6), gentle pulse animation
+    EXPECT: Profile sync status = 'Offline'
+    EXPECT: NO crash, NO error modal
+
+3.2 Come back online
+    ACTION: re-enable network
+    EXPECT: `online` event fires → flush() triggered automatically
+    EXPECT: sync_queue drained → Supabase row created
+    EXPECT: island dot returns to green
+    EXPECT: Profile sync status = 'Synced'
+
+3.3 visibilitychange trigger (iOS Safari specific)
+    ACTION: switch to another app → return to Fit Elite
+    EXPECT: visibilitychange fires with state = 'visible'
+    EXPECT: flush() called
+    EXPECT: no duplicate records in Supabase (idempotent UPSERT by id)
+
+3.4 Multiple offline sessions queue correctly
+    ACTION: go offline → complete 3 workouts → save each → come online
+    EXPECT: sync_queue contains 3 items
+    EXPECT: all 3 upserted to Supabase in single batch flush
+    EXPECT: sync_queue empty after flush
+
+---
+
+### BLOCK 4 — Exponential Backoff
+
+4.1 Simulate Supabase failure (rate limit / 5xx)
+    ACTION: mock Supabase to return 503 on first 3 requests
+    EXPECT: retry after 500ms → 1000ms → 2000ms
+    EXPECT: max retry delay capped at 30000ms
+    EXPECT: sync_queue item NOT removed on failed attempt
+    EXPECT: status = 'pending' during retries
+    EXPECT: success on 4th attempt → item removed → status = 'synced'
+
+4.2 Network drops mid-flush
+    ACTION: disconnect network during flush()
+    EXPECT: _flushing flag resets to false
+    EXPECT: no items removed from sync_queue
+    EXPECT: retry scheduled after reconnect
+
+---
+
+### BLOCK 5 — Recovery Code & Data Restore
+
+5.1 Read Recovery Code
+    ACTION: open Profile → Device section
+    EXPECT: code visible in format XXXX-XXXX-XXXX (uppercase hex)
+    EXPECT: tap Copy → clipboard contains the code
+    EXPECT: code persists across app restarts (stored in localStorage)
+
+5.2 Restore on new device
+    ACTION: clear localStorage (simulate new device) → Profile → Restore → enter valid code
+    EXPECT: restore() called with correct device_id prefix
+    EXPECT: GET request to Supabase with x-device-id header
+    EXPECT: workouts pulled and written to IndexedDB
+    EXPECT: toast shows "Restored N workouts"
+    EXPECT: Home screen hero metric updates with pulled data
+
+5.3 LWW conflict resolution
+    ACTION: same workout exists locally (newer) and on server (older)
+    EXPECT: local version kept (updated_at local > remote)
+
+    ACTION: same workout exists locally (older) and on server (newer)  
+    EXPECT: server version wins (updated_at remote > local)
+
+5.4 Invalid Recovery Code
+    ACTION: enter code with wrong format (less than 12 chars)
+    EXPECT: toast shows 'Invalid code' immediately
+    EXPECT: no network request made
+    EXPECT: no data changes
+
+---
+
+### BLOCK 6 — Dynamic Island Behavior
+
+6.1 Collapsed state layout
+    EXPECT: dot left-aligned (16px from edge)
+    EXPECT: timer centered absolutely (left: 50%, transform: translateX(-50%))
+    EXPECT: set counter right-aligned (16px from edge)
+    EXPECT: capsule width: 220px, height: 34px
+
+6.2 Expanded state on tap
+    EXPECT: smooth transition (0.38s cubic-bezier)
+    EXPECT: exercise name appears (opacity 0→1)
+    EXPECT: sublabel visible at bottom
+    EXPECT: capsule expands to 310px × 54px
+
+6.3 Island hidden when no session
+    EXPECT: `hidden` attribute on workout-bar when session.status = IDLE
+    EXPECT: island appears immediately on session.start()
+    EXPECT: island hides after session.save() or session.discard()
+
+6.4 Set counter colors
+    EXPECT: 1/4 → color #2a2a2a (barely visible)
+    EXPECT: 2/4 → color #444444
+    EXPECT: 3/4 → color #9a9a9a
+    EXPECT: 4/4 → color #00c86e (green)
+
+---
+
+### BLOCK 7 — iOS Safari Specific
+
+7.1 IndexedDB quota
+    EXPECT: no QuotaExceededError on 50+ workouts stored
+    EXPECT: navigator.storage.persist() requested (prevents eviction)
+
+7.2 No Background Sync API usage
+    EXPECT: no ServiceWorker.sync.register() calls anywhere
+    EXPECT: sync triggered only via: visibilitychange | online | setInterval
+
+7.3 CSS variable resolution in Canvas charts
+    EXPECT: bar charts render with correct PPL colors
+    EXPECT: --pushL resolves to #818cf8, --pullL to #4da6ff, --legsL to #a78bfa
+    EXPECT: no gray/transparent bars when data exists
+
+7.4 Double-tap edit on done sets
+    EXPECT: two taps within 400ms on a done/PR set → row becomes editable
+    EXPECT: single tap does NOT unlock
+    EXPECT: save button in unlocked row saves edits in-memory (no db write)
+
+7.5 Web Component registration
+    EXPECT: customElements.define('workout-bar') called before first render
+    EXPECT: shadow DOM isolates styles (no leakage to/from main document)
+
+---
+
+### BLOCK 8 — Data Integrity
+
+8.1 Discard workout
+    ACTION: start workout → log 2 sets → tap Finish → tap Discard
+    EXPECT: IndexedDB `workouts` store unchanged
+    EXPECT: sync_queue unchanged
+    EXPECT: Supabase unchanged
+    EXPECT: session resets to IDLE
+
+8.2 No duplicate workouts on retry
+    ACTION: save workout → immediately kill network → flush fails → reconnect → flush retries
+    EXPECT: exactly ONE row in Supabase (UPSERT by id is idempotent)
+    EXPECT: no duplicate in IndexedDB
+
+8.3 Core rotation correctness
+    ACTION: complete 6 workouts forcing Core usage: A×3, B×1, C×2
+    EXPECT: 7th workout selects Core B (least used = 1)
+    EXPECT: core_usage in IndexedDB: { core_a: 3, core_b: 2, core_c: 2 } after 7th
+
+8.4 Rotation toggle (Incline Press Machine / DB)
+    ACTION: complete Push A twice
+    EXPECT: first session uses 'incline_press_machine'
+    EXPECT: second session uses 'incline_press_db'
+    EXPECT: third session back to 'incline_press_machine'
+
+---
+
+## PASS CRITERIA
+
+| Block | Tests | Required pass rate |
+|-------|-------|--------------------|
+| 1 App Load | 3 | 100% |
+| 2 Workout Flow | 5 | 100% |
+| 3 Offline | 4 | 100% |
+| 4 Backoff | 2 | 100% |
+| 5 Recovery | 4 | 100% |
+| 6 Island | 4 | 95% |
+| 7 iOS Safari | 5 | 90% |
+| 8 Data Integrity | 4 | 100% |
+
+**Overall: 31 tests. Minimum 29 passing to proceed to production.**
+
+---
+
+## KNOWN ACCEPTABLE FAILURES
+
+- 7.1: Safari quota behavior varies by OS version — warn only, not fail
+- 7.3: Canvas CSS var resolution may need polyfill on older iOS — log and continue
+
+---
+
+## REPORT FORMAT
+
+For each failed test provide:
+1. Test ID (e.g. 3.2)
+2. Expected behavior
+3. Actual behavior
+4. Console errors if any
+5. Suggested fix
+
+Prioritize BLOCK 3 (Offline) and BLOCK 7 (iOS Safari) — these are the highest risk areas.

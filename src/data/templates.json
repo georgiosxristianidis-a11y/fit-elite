@@ -1,0 +1,301 @@
+{
+  "version": 1,
+  "updated_at": "2026-03-28",
+
+  "exercises": {
+    "bench_press":            { "id": "bench_press",            "name": "Bench Press",            "name_ru": "Жим лёжа",              "equipment": "barbell",    "muscles": ["chest"],                          "weight_step": 2.5 },
+    "incline_press_machine":  { "id": "incline_press_machine",  "name": "Incline Press Machine",  "name_ru": "Жим наклонный тренажёр","equipment": "machine",    "muscles": ["chest", "front_delt"],            "weight_step": 5   },
+    "incline_press_db":       { "id": "incline_press_db",       "name": "Incline Press DB",       "name_ru": "Жим наклонный гантели", "equipment": "dumbbell",   "muscles": ["chest", "front_delt"],            "weight_step": 2.5 },
+    "butterfly":              { "id": "butterfly",              "name": "Butterfly",              "name_ru": "Бабочка",               "equipment": "machine",    "muscles": ["chest"],                          "weight_step": 5   },
+    "chest_press_machine":    { "id": "chest_press_machine",    "name": "Chest Press Machine",    "name_ru": "Жим грудной тренажёр",  "equipment": "machine",    "muscles": ["chest", "triceps"],               "weight_step": 5   },
+    "dips":                   { "id": "dips",                   "name": "Dips",                   "name_ru": "Отжимания на брусьях",  "equipment": "bodyweight", "muscles": ["chest", "triceps"],               "weight_step": 2.5 },
+    "biceps_curl":            { "id": "biceps_curl",            "name": "Biceps Curl",            "name_ru": "Сгибание бицепс",       "equipment": "barbell",    "muscles": ["biceps"],                         "weight_step": 2.5 },
+    "db_curl_db":             { "id": "db_curl_db",             "name": "DB Curl",                "name_ru": "Сгибание гантели",      "equipment": "dumbbell",   "muscles": ["biceps"],                         "weight_step": 2.5 },
+    "db_curl_barbell":        { "id": "db_curl_barbell",        "name": "DB Curl (Barbell)",      "name_ru": "Сгибание штанга",       "equipment": "barbell",    "muscles": ["biceps"],                         "weight_step": 2.5 },
+    "cable_biceps":           { "id": "cable_biceps",           "name": "Cable Biceps",           "name_ru": "Бицепс кабель",         "equipment": "cable",      "muscles": ["biceps"],                         "weight_step": 2.5 },
+    "pullover_db":            { "id": "pullover_db",            "name": "Pullover DB",            "name_ru": "Пуловер гантель",       "equipment": "dumbbell",   "muscles": ["triceps", "chest"],               "weight_step": 2.5 },
+    "db_triceps_extension":   { "id": "db_triceps_extension",   "name": "DB Triceps Extension",   "name_ru": "Разгибание трицепс DB", "equipment": "dumbbell",   "muscles": ["triceps"],                        "weight_step": 2.5 },
+    "cable_triceps_pushdown": { "id": "cable_triceps_pushdown", "name": "Cable Triceps Pushdown", "name_ru": "Трицепс кабель",        "equipment": "cable",      "muscles": ["triceps"],                        "weight_step": 2.5 },
+    "pull_ups":               { "id": "pull_ups",               "name": "Pull Ups",               "name_ru": "Подтягивания",          "equipment": "bodyweight", "muscles": ["back", "biceps"],                 "weight_step": 2.5, "weighted_toggle": true },
+    "lat_pull_down":          { "id": "lat_pull_down",          "name": "Lat Pull Down",          "name_ru": "Тяга верхняя",          "equipment": "machine",    "muscles": ["back", "biceps"],                 "weight_step": 5   },
+    "chest_support_row":      { "id": "chest_support_row",      "name": "Chest-Support Row",      "name_ru": "Тяга с упором в грудь", "equipment": "machine",    "muscles": ["back", "rear_delt"],              "weight_step": 5   },
+    "low_cable_row":          { "id": "low_cable_row",          "name": "Low Cable Row",          "name_ru": "Тяга нижнего блока",    "equipment": "cable",      "muscles": ["back", "biceps"],                 "weight_step": 5   },
+    "shrugs":                 { "id": "shrugs",                 "name": "Shrugs",                 "name_ru": "Шраги",                 "equipment": "barbell",    "muscles": ["traps"],                          "weight_step": 5   },
+    "leg_press":              { "id": "leg_press",              "name": "Leg Press",              "name_ru": "Жим ногами",            "equipment": "machine",    "muscles": ["quads", "glutes"],                "weight_step": 10  },
+    "hack_squat":             { "id": "hack_squat",             "name": "Hack Squat",             "name_ru": "Гакк-приседания",       "equipment": "machine",    "muscles": ["quads"],                          "weight_step": 10  },
+    "lunges":                 { "id": "lunges",                 "name": "Lunges",                 "name_ru": "Выпады",                "equipment": "dumbbell",   "muscles": ["quads", "glutes"],                "weight_step": 2.5 },
+    "leg_extension":          { "id": "leg_extension",          "name": "Leg Extension",          "name_ru": "Разгибание ног",        "equipment": "machine",    "muscles": ["quads"],                          "weight_step": 5   },
+    "hamstring_curl":         { "id": "hamstring_curl",         "name": "Hamstring Curl",         "name_ru": "Сгибание ног",          "equipment": "machine",    "muscles": ["hamstrings"],                     "weight_step": 5   },
+    "glute_bridge":           { "id": "glute_bridge",           "name": "Glute Bridge",           "name_ru": "Ягодичный мост",        "equipment": "barbell",    "muscles": ["glutes", "hamstrings"],           "weight_step": 5   },
+    "calf_raises":            { "id": "calf_raises",            "name": "Calf Raises",            "name_ru": "Подъём на икры",        "equipment": "machine",    "muscles": ["calves"],                         "weight_step": 5   },
+    "adductor":               { "id": "adductor",               "name": "Adductor",               "name_ru": "Приводящие",            "equipment": "machine",    "muscles": ["adductors"],                      "weight_step": 5   },
+    "abductor":               { "id": "abductor",               "name": "Abductor",               "name_ru": "Отводящие",             "equipment": "machine",    "muscles": ["abductors"],                      "weight_step": 5   },
+    "rear_delt_machine":      { "id": "rear_delt_machine",      "name": "Rear Delt Machine",      "name_ru": "Задняя дельта тренажёр","equipment": "machine",    "muscles": ["rear_delt", "traps"],             "weight_step": 5   },
+    "rear_delt_barbell":      { "id": "rear_delt_barbell",      "name": "Rear Delt Barbell",      "name_ru": "Задняя дельта штанга",  "equipment": "barbell",    "muscles": ["rear_delt", "traps"],             "weight_step": 2.5 },
+    "front_raise_barbell":    { "id": "front_raise_barbell",    "name": "Front Raise Barbell",    "name_ru": "Подъём штанга перед собой","equipment": "barbell", "muscles": ["front_delt"],                     "weight_step": 2.5 },
+    "front_raise_lateral_db": { "id": "front_raise_lateral_db","name": "DB Lateral Raise",       "name_ru": "Подъём гантели в сторону","equipment": "dumbbell", "muscles": ["front_delt", "side_delt"],        "weight_step": 2.5 },
+    "butterfly_rear_machine": { "id": "butterfly_rear_machine", "name": "Butterfly Rear Machine", "name_ru": "Бабочка задняя тренажёр","equipment": "machine",  "muscles": ["rear_delt"],                      "weight_step": 5   },
+    "butterfly_rear_db":      { "id": "butterfly_rear_db",      "name": "DB Bent-Over Rear Delt", "name_ru": "Разводка в наклоне",    "equipment": "dumbbell",   "muscles": ["rear_delt"],                      "weight_step": 2.5 },
+    "dead_bug":               { "id": "dead_bug",               "name": "Dead Bug",               "name_ru": "Мёртвый жук",           "equipment": "bodyweight", "muscles": ["core"],                           "weight_step": 0, "timed": true  },
+    "ab_machine":             { "id": "ab_machine",             "name": "Ab Machine",             "name_ru": "Пресс тренажёр",        "equipment": "machine",    "muscles": ["core"],                           "weight_step": 5   },
+    "hyperextension":         { "id": "hyperextension",         "name": "Hyperextension",         "name_ru": "Гиперэкстензия",        "equipment": "machine",    "muscles": ["lower_back", "glutes"],           "weight_step": 2.5, "weighted_toggle": true },
+    "hanging_leg_raise":      { "id": "hanging_leg_raise",      "name": "Hanging Leg Raise",      "name_ru": "Подъём ног в висе",     "equipment": "bodyweight", "muscles": ["core"],                           "weight_step": 0   },
+    "plank":                  { "id": "plank",                  "name": "Plank",                  "name_ru": "Планка",                "equipment": "bodyweight", "muscles": ["core"],                           "weight_step": 0, "timed": true  },
+    "ab_wheel":               { "id": "ab_wheel",               "name": "Ab Wheel",               "name_ru": "Ролик для пресса",      "equipment": "bodyweight", "muscles": ["core"],                           "weight_step": 0   },
+    "hanging_knee_raise":     { "id": "hanging_knee_raise",     "name": "Hanging Knee Raise",     "name_ru": "Подъём колен в висе",   "equipment": "bodyweight", "muscles": ["core"],                           "weight_step": 0   },
+    "plank_variation":        { "id": "plank_variation",        "name": "Plank Variation",        "name_ru": "Планка вариация",       "equipment": "bodyweight", "muscles": ["core"],                           "weight_step": 0, "timed": true  }
+  },
+
+  "templates": {
+
+    "push_a": {
+      "id": "push_a",
+      "name": "Push A",
+      "name_ru": "Пуш А",
+      "type": "push",
+      "subtitle": "Chest + Biceps",
+      "subtitle_ru": "Грудь + Бицепс",
+      "color_token": "pushL",
+      "muscle_groups": [
+        {
+          "id": "chest",
+          "name": "Chest",
+          "name_ru": "Грудь",
+          "exercises": [
+            { "exercise_id": "bench_press",           "sets": 4, "reps": 8,  "rotation": null },
+            { "exercise_id": "incline_press_machine", "sets": 3, "reps": 10, "rotation": { "with": "incline_press_db", "label": "Machine / DB" } },
+            { "exercise_id": "butterfly",             "sets": 3, "reps": 12, "rotation": null },
+            { "exercise_id": "chest_press_machine",   "sets": 3, "reps": 12, "rotation": null },
+            { "exercise_id": "dips",                  "sets": 3, "reps": 10, "rotation": null }
+          ]
+        },
+        {
+          "id": "biceps",
+          "name": "Biceps",
+          "name_ru": "Бицепс",
+          "exercises": [
+            { "exercise_id": "biceps_curl",   "sets": 3, "reps": 12, "rotation": null },
+            { "exercise_id": "db_curl_db",    "sets": 3, "reps": 12, "rotation": { "with": "db_curl_barbell", "label": "DB / Barbell" } },
+            { "exercise_id": "cable_biceps",  "sets": 3, "reps": 15, "rotation": null }
+          ]
+        }
+      ]
+    },
+
+    "push_b": {
+      "id": "push_b",
+      "name": "Push B",
+      "name_ru": "Пуш Б",
+      "type": "push",
+      "subtitle": "Chest + Triceps",
+      "subtitle_ru": "Грудь + Трицепс",
+      "color_token": "pushL",
+      "muscle_groups": [
+        {
+          "id": "chest",
+          "name": "Chest",
+          "name_ru": "Грудь",
+          "exercises": [
+            { "exercise_id": "bench_press",           "sets": 4, "reps": 8,  "rotation": null },
+            { "exercise_id": "incline_press_machine", "sets": 3, "reps": 10, "rotation": { "with": "incline_press_db", "label": "Machine / DB" } },
+            { "exercise_id": "butterfly",             "sets": 3, "reps": 12, "rotation": null },
+            { "exercise_id": "chest_press_machine",   "sets": 3, "reps": 12, "rotation": null },
+            { "exercise_id": "dips",                  "sets": 3, "reps": 10, "rotation": null }
+          ]
+        },
+        {
+          "id": "triceps",
+          "name": "Triceps",
+          "name_ru": "Трицепс",
+          "exercises": [
+            { "exercise_id": "pullover_db",            "sets": 3, "reps": 12, "rotation": null },
+            { "exercise_id": "db_triceps_extension",   "sets": 3, "reps": 12, "rotation": null },
+            { "exercise_id": "cable_triceps_pushdown", "sets": 3, "reps": 15, "rotation": null }
+          ]
+        }
+      ]
+    },
+
+    "pull_a": {
+      "id": "pull_a",
+      "name": "Pull A",
+      "name_ru": "Пул А",
+      "type": "pull",
+      "subtitle": "Back + Biceps",
+      "subtitle_ru": "Спина + Бицепс",
+      "color_token": "pullL",
+      "muscle_groups": [
+        {
+          "id": "back",
+          "name": "Back",
+          "name_ru": "Спина",
+          "exercises": [
+            { "exercise_id": "pull_ups",          "sets": 4, "reps": 8,  "rotation": null, "weighted_toggle": true },
+            { "exercise_id": "lat_pull_down",     "sets": 3, "reps": 10, "rotation": null },
+            { "exercise_id": "chest_support_row", "sets": 3, "reps": 10, "rotation": null },
+            { "exercise_id": "low_cable_row",     "sets": 3, "reps": 12, "rotation": null },
+            { "exercise_id": "shrugs",            "sets": 3, "reps": 15, "rotation": null }
+          ]
+        },
+        {
+          "id": "biceps",
+          "name": "Biceps",
+          "name_ru": "Бицепс",
+          "exercises": [
+            { "exercise_id": "biceps_curl",  "sets": 3, "reps": 12, "rotation": null },
+            { "exercise_id": "db_curl_db",   "sets": 3, "reps": 12, "rotation": { "with": "db_curl_barbell", "label": "DB / Barbell" } },
+            { "exercise_id": "cable_biceps", "sets": 3, "reps": 15, "rotation": null }
+          ]
+        }
+      ]
+    },
+
+    "pull_b": {
+      "id": "pull_b",
+      "name": "Pull B",
+      "name_ru": "Пул Б",
+      "type": "pull",
+      "subtitle": "Back + Triceps",
+      "subtitle_ru": "Спина + Трицепс",
+      "color_token": "pullL",
+      "muscle_groups": [
+        {
+          "id": "back",
+          "name": "Back",
+          "name_ru": "Спина",
+          "exercises": [
+            { "exercise_id": "pull_ups",          "sets": 4, "reps": 8,  "rotation": null, "weighted_toggle": true },
+            { "exercise_id": "lat_pull_down",     "sets": 3, "reps": 10, "rotation": null },
+            { "exercise_id": "chest_support_row", "sets": 3, "reps": 10, "rotation": null },
+            { "exercise_id": "low_cable_row",     "sets": 3, "reps": 12, "rotation": null },
+            { "exercise_id": "shrugs",            "sets": 3, "reps": 15, "rotation": null }
+          ]
+        },
+        {
+          "id": "triceps",
+          "name": "Triceps",
+          "name_ru": "Трицепс",
+          "exercises": [
+            { "exercise_id": "pullover_db",            "sets": 3, "reps": 12, "rotation": null },
+            { "exercise_id": "db_triceps_extension",   "sets": 3, "reps": 12, "rotation": null },
+            { "exercise_id": "cable_triceps_pushdown", "sets": 3, "reps": 15, "rotation": null }
+          ]
+        }
+      ]
+    },
+
+    "legs_a": {
+      "id": "legs_a",
+      "name": "Legs A",
+      "name_ru": "Ноги А",
+      "type": "legs",
+      "subtitle": "Quads + Posterior + Shoulders",
+      "subtitle_ru": "Квадры + Задняя цепь + Плечи",
+      "color_token": "legsL",
+      "muscle_groups": [
+        {
+          "id": "quads",
+          "name": "Quads",
+          "name_ru": "Квадрицепс",
+          "exercises": [
+            { "exercise_id": "leg_press",     "sets": 4, "reps": 10, "rotation": null },
+            { "exercise_id": "hack_squat",    "sets": 3, "reps": 10, "rotation": { "with": "lunges", "label": "Hack Squat / Lunges" } },
+            { "exercise_id": "leg_extension", "sets": 3, "reps": 12, "rotation": null }
+          ]
+        },
+        {
+          "id": "posterior",
+          "name": "Posterior",
+          "name_ru": "Задняя цепь",
+          "exercises": [
+            { "exercise_id": "hamstring_curl", "sets": 3, "reps": 12, "rotation": null },
+            { "exercise_id": "glute_bridge",   "sets": 3, "reps": 15, "rotation": null }
+          ]
+        },
+        {
+          "id": "finish",
+          "name": "Finish",
+          "name_ru": "Финиш",
+          "exercises": [
+            { "exercise_id": "calf_raises", "sets": 4, "reps": 20, "rotation": null },
+            { "exercise_id": "adductor",    "sets": 3, "reps": 15, "rotation": null },
+            { "exercise_id": "abductor",    "sets": 3, "reps": 15, "rotation": null }
+          ]
+        },
+        {
+          "id": "shoulders",
+          "name": "Shoulders",
+          "name_ru": "Плечи",
+          "exercises": [
+            { "exercise_id": "rear_delt_machine",   "sets": 3, "reps": 15, "rotation": { "with": "rear_delt_barbell",    "label": "Machine / Barbell" } },
+            { "exercise_id": "front_raise_barbell", "sets": 3, "reps": 12, "rotation": { "with": "front_raise_lateral_db","label": "Barbell / DB Lateral" } },
+            { "exercise_id": "butterfly_rear_machine","sets": 3,"reps": 12, "rotation": { "with": "butterfly_rear_db",    "label": "Machine / DB Bent-Over" } }
+          ]
+        }
+      ]
+    }
+  },
+
+  "core": {
+    "core_a": {
+      "id": "core_a",
+      "name": "Core A",
+      "name_ru": "Кор А",
+      "exercises": [
+        { "exercise_id": "dead_bug",   "sets": 3, "duration_sec": 45, "reps": null },
+        { "exercise_id": "ab_machine", "sets": 3, "reps": 15, "duration_sec": null }
+      ]
+    },
+    "core_b": {
+      "id": "core_b",
+      "name": "Core B",
+      "name_ru": "Кор Б",
+      "exercises": [
+        { "exercise_id": "hyperextension",   "sets": 3, "reps": 15, "duration_sec": null, "weighted_toggle": true },
+        { "exercise_id": "hanging_leg_raise","sets": 3, "reps": 12, "duration_sec": null },
+        { "exercise_id": "plank",            "sets": 3, "duration_sec": 60, "reps": null }
+      ]
+    },
+    "core_c": {
+      "id": "core_c",
+      "name": "Core C",
+      "name_ru": "Кор В",
+      "exercises": [
+        { "exercise_id": "ab_wheel",          "sets": 3, "reps": 10, "duration_sec": null },
+        { "exercise_id": "hanging_knee_raise","sets": 3, "reps": 15, "duration_sec": null },
+        { "exercise_id": "plank_variation",   "sets": 3, "duration_sec": 60, "reps": null }
+      ]
+    }
+  },
+
+  "stretch": {
+    "push": {
+      "id": "stretch_push",
+      "name": "Push Stretch",
+      "name_ru": "Растяжка Пуш",
+      "duration_min": 5,
+      "zones": ["chest", "biceps", "triceps", "front_delt"]
+    },
+    "pull": {
+      "id": "stretch_pull",
+      "name": "Pull Stretch",
+      "name_ru": "Растяжка Пул",
+      "duration_min": 5,
+      "zones": ["back", "traps", "rear_delt", "biceps"]
+    },
+    "legs": {
+      "id": "stretch_legs",
+      "name": "Legs Stretch",
+      "name_ru": "Растяжка Ноги",
+      "duration_min": 5,
+      "zones": ["quads", "hamstrings", "glutes", "calves", "shoulders"]
+    }
+  },
+
+  "muscle_chips": {
+    "push":  { "sub": ["chest", "front_delt", "triceps", "biceps"] },
+    "pull":  { "sub": ["back", "rear_delt", "biceps", "traps"] },
+    "legs":  { "sub": ["quads", "hamstrings", "glutes", "calves", "shoulders"] },
+    "core":  { "sub": [] }
+  }
+}
