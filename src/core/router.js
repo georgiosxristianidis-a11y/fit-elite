@@ -46,7 +46,7 @@ export function init(appEl, navEl) {
   });
 
   // Bus
-  bus.on('nav:switch',      ({ screen }) => navigate(screen));
+  bus.on('nav:switch',      (payload) => navigate(payload.screen, false, payload));
   bus.on('toast',           ({ msg, type }) => showToast(msg, type));
   bus.on('lang:changed',    ({ lang }) => { _lang = lang; _remount(); });
   bus.on('settings:changed',({ lang, theme }) => {
@@ -64,7 +64,7 @@ export function init(appEl, navEl) {
 
 // ─── Navigate ────────────────────────────────────────────────────────────────
 
-export function navigate(screen, silent = false) {
+export function navigate(screen, silent = false, args = {}) {
   if (!SCREENS[screen]) return;
 
   // Unmount current
@@ -84,6 +84,9 @@ export function navigate(screen, silent = false) {
 
   _current = screen;
 
+  // L-4 Fix: reset scroll so each new screen starts at the top
+  _appEl.scrollTop = 0;
+
   // Clear + mount
   if (!silent) _appEl.innerHTML = '';
   const div = document.createElement('div');
@@ -91,8 +94,9 @@ export function navigate(screen, silent = false) {
   _appEl.innerHTML = '';
   _appEl.appendChild(div);
 
-  SCREENS[screen].mount(div, _lang);
+  SCREENS[screen].mount(div, _lang, args);
 }
+
 
 // ─── Remount current (after lang change) ─────────────────────────────────────
 

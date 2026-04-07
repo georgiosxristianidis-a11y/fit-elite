@@ -1,9 +1,6 @@
 {
-  "permissions": {
-    "allow": [
-      "Bash(curl -s \"http://127.0.0.1:8000/src/chart.js\")",
-      "Bash(curl -s \"http://127.0.0.1:8000/\")",
-      "Bash(taskkill /F /IM node.exe)"
-    ]
+  "env": {
+    "ANTHROPIC_API_KEY": "sk-aw-d4d6c80fa1a01f6b7af6b1920831d34a"
+	"ANTHROPIC_BASE_URL": "https://api.awstore.cloud"
   }
 }

@@ -151,6 +151,7 @@ export async function flush() {
   if (allOk) {
     const remaining = await db.getSyncQueue();
     _setStatus(remaining.length ? 'pending' : 'synced');
+    if (!remaining.length) localStorage.setItem('fit_elite_last_sync_date', new Date().toISOString());
     bus.emit('sync:flushed');
   } else {
     _setStatus('pending');
@@ -228,6 +229,7 @@ export async function restore(recoveryCode) {
     }
 
     _setStatus('synced');
+    localStorage.setItem('fit_elite_last_sync_date', new Date().toISOString());
     bus.emit('sync:restore_complete', { merged, total: remote.length });
     return { ok: true, merged, total: remote.length };
 
@@ -265,9 +267,10 @@ function _scheduleFlush(delay = 300) {
 }
 
 function _scheduleRetry() {
-  const delay = Math.min(_retryDelay, 30000);
+  const jitter = 0.75 + Math.random() * 0.5; // ±25%
+  const delay = Math.min(_retryDelay, 30000) * jitter;
   _retryDelay = delay * 2;
-  console.log(`[sync] retry in ${delay}ms`);
+  console.log(`[sync] retry in ${Math.round(delay)}ms`);
   clearTimeout(_retryTimer);
   _retryTimer = setTimeout(flush, delay);
 }

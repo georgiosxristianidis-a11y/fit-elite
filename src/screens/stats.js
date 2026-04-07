@@ -13,6 +13,7 @@ import db from '../core/db.js';
 import { bus } from '../core/bus.js';
 import templates from '../data/templates.json' with { type: 'json' };
 import { drawBarChart } from '../chart.js';
+import units from '../core/units.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -45,9 +46,13 @@ let _timeHistory = null;
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
-export async function mount(el, lang = 'en') {
+export async function mount(el, lang = 'en', args = {}) {
   _el   = el;
   _lang = lang;
+  if (args.exercise) {
+    _activeTab = 'records';
+    _selectedEx = args.exercise;
+  }
   _renderSkeleton();
   await _loadData();
   _render();
@@ -73,11 +78,14 @@ async function _loadData() {
 
 // ─── Bus ─────────────────────────────────────────────────────────────────────
 
+// H-1 Fix: store named handler reference for proper cleanup
+const _onSessionSavedStats = async () => { await _loadData(); _render(); };
+
 function _bindBus() {
-  bus.on('session:saved', async () => { await _loadData(); _render(); });
+  bus.on('session:saved', _onSessionSavedStats);
 }
 function _unbindBus() {
-  bus.off('session:saved', () => {});
+  bus.off('session:saved', _onSessionSavedStats);
 }
 
 // ─── Render ───────────────────────────────────────────────────────────────────
@@ -168,11 +176,11 @@ function _renderRecords() {
                   <div class="rec-item-main">
                     <div class="rec-item-left">
                       <div class="rec-item-name">${name}</div>
-                      <div class="rec-item-meta">${rec.reps} reps · 1RM <span style="color:var(--warn)">${orm} kg</span></div>
+                      <div class="rec-item-meta">${rec.reps} reps · 1RM <span style="color:var(--warn)">${units.displayWeight(orm)} ${units.getUnit()}</span></div>
                     </div>
                     <div class="rec-item-right">
-                      <div class="rec-item-kg" style="color:${color}">${rec.kg}</div>
-                      <div class="rec-item-unit">kg</div>
+                      <div class="rec-item-kg" style="color:${color}">${units.displayWeight(rec.kg)}</div>
+                      <div class="rec-item-unit">${units.getUnit()}</div>
                     </div>
                   </div>
                   ${isSelected ? `<div class="rec-chart-wrap" id="chart-${exId}"></div>` : ''}
@@ -197,7 +205,7 @@ function _renderVolume() {
   return `
     <div class="chart-section">
       ${_renderPeriodPicker()}
-      <div class="chart-title">${_t('Volume (kg)', 'Объём (кг)')}</div>
+      <div class="chart-title">${_t('Volume', 'Объём')} (${units.getUnit()})</div>
       <canvas id="vol-chart" height="200"></canvas>
       ${_renderVolLegend(filtered)}
     </div>
@@ -206,15 +214,20 @@ function _renderVolume() {
 
 function _renderVolLegend(data) {
   const total = Math.round(data.reduce((a, d) => a + d.volume_kg, 0));
+  const sets  = data.reduce((a, d) => a + (d.total_sets ?? 0), 0);
   const avg   = data.length ? Math.round(total / data.length) : 0;
   return `
     <div class="chart-legend">
       <div class="legend-item">
-        <div class="legend-val" style="color:var(--p)">${total.toLocaleString()}</div>
-        <div class="legend-lbl">${_t('Total kg', 'Итого кг')}</div>
+        <div class="legend-val" style="color:var(--p)">${units.displayWeight(total).toLocaleString()}</div>
+        <div class="legend-lbl">${_t('Total', 'Итого')} ${units.getUnit()}</div>
       </div>
       <div class="legend-item">
-        <div class="legend-val">${avg.toLocaleString()}</div>
+        <div class="legend-val">${sets.toLocaleString()}</div>
+        <div class="legend-lbl">${_t('Total sets', 'Всего сетов')}</div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-val">${units.displayWeight(avg).toLocaleString()}</div>
         <div class="legend-lbl">${_t('Avg / session', 'Среднее / сессия')}</div>
       </div>
       <div class="legend-item">
@@ -292,12 +305,12 @@ async function _drawCharts() {
     const data = _filterByPeriod(_volHistory ?? []);
     drawBarChart(canvas, {
       labels:  data.map(d => _shortDate(d.date)),
-      values:  data.map(d => Math.round(d.volume_kg)),
+      values:  data.map(d => Math.round(units.displayWeight(d.volume_kg))),
       colors:  data.map(d => PPL_HEX[d.ppl_type] ?? '#555'),
       tooltip: (i) => `${data[i].date}\n${_t(
         PPL_META_LABEL(data[i].ppl_type, 'en'),
         PPL_META_LABEL(data[i].ppl_type, 'ru')
-      )}\n${Math.round(data[i].volume_kg).toLocaleString()} kg`,
+      )}\n${Math.round(units.displayWeight(data[i].volume_kg)).toLocaleString()} ${units.getUnit()}`,
     });
   }
 
@@ -330,9 +343,9 @@ async function _drawCharts() {
     const pplType = _exToPPL(templates.exercises[_selectedEx]?.muscles ?? []);
     drawBarChart(canvas, {
       labels: history.map(h => _shortDate(h.date)),
-      values: history.map(h => h.kg),
+      values: history.map(h => units.displayWeight(h.kg)),
       colors: history.map(() => PPL_HEX[pplType] ?? '#818cf8'),
-      tooltip: (i) => `${history[i].date}\n${history[i].kg} kg × ${history[i].reps}`,
+      tooltip: (i) => `${history[i].date}\n${units.displayWeight(history[i].kg)} ${units.getUnit()} × ${history[i].reps}`,
       type: 'line',
     });
   }
@@ -391,8 +404,9 @@ function _shortDate(dateStr) {
 
 function _exToPPL(muscles) {
   if (!muscles) return 'other';
-  if (muscles.some(m => ['chest','triceps','front_delt','side_delt','biceps'].includes(m))) return 'push';
-  if (muscles.some(m => ['back','rear_delt','traps'].includes(m))) return 'pull';
+  // M-5 Fix: biceps is a pull muscle (matches train.js grouping)
+  if (muscles.some(m => ['chest','triceps','front_delt','side_delt'].includes(m))) return 'push';
+  if (muscles.some(m => ['back','rear_delt','traps','biceps'].includes(m))) return 'pull';
   if (muscles.some(m => ['quads','hamstrings','glutes','calves','adductors','abductors'].includes(m))) return 'legs';
   return 'other';
 }

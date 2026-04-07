@@ -215,6 +215,25 @@ export function logSet({ kg, reps, rpe = null }) {
   _emit('session:set_logged');
 }
 
+/**
+ * C-4 Fix: Official API for editing a previously logged set.
+ * @param {string} exerciseId - exercise_id of the set to edit
+ * @param {number} idx        - 0-based index among sets for this exercise
+ * @param {{ kg?: number, reps?: number, rpe?: number|null }} patch
+ */
+export function editSet(exerciseId, idx, patch) {
+  const sets = _state.sets.filter(s => s.exercise_id === exerciseId);
+  const target = sets[idx];
+  if (!target) return;
+
+  if (patch.kg   !== undefined) target.kg   = parseFloat(patch.kg)   || 0;
+  if (patch.reps !== undefined) target.reps = parseInt(patch.reps, 10) || 0;
+  if (patch.rpe  !== undefined) target.rpe  = patch.rpe !== null ? parseFloat(patch.rpe) : null;
+
+  _emit('session:set_edited');
+}
+
+
 export function nextExercise() {
   const exercises = _state.status === STATE.TRAINING
     ? _flattenTemplate(_state.template_id)
@@ -369,6 +388,7 @@ export default {
   STATE,
   start,
   logSet,
+  editSet,
   nextExercise,
   completeStretch,
   pause,
@@ -378,6 +398,7 @@ export default {
   getSnapshot,
   getIslandData,
 };
+
 
 // ─── Init sync on module load ─────────────────────────────────────────────────
 sync.init();

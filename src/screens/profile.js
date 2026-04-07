@@ -20,6 +20,7 @@ let _el   = null;
 let _lang = 'en';
 
 const DEFAULTS = {
+  name:           'Gio',
   theme:          'dark',
   lang:           'en',
   rest_timer_sec: 90,
@@ -33,9 +34,14 @@ const DEFAULTS = {
   core_b_dur:     300,
   core_c_dur:     300,
   stretch_dur:    300,
+  unit:           'kg',
+  body_metrics:   true,
 };
 
 let _settings = { ...DEFAULTS };
+
+// ─── Module-level listeners (for proper bus.off cleanup) ─────────────────────
+const _onSyncStatus = () => _checkSyncStatus();
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
@@ -44,11 +50,12 @@ export async function mount(el, lang = 'en') {
   _lang = lang;
   _loadSettings();
   await _render();
-  bus.on('sync:status', () => _checkSyncStatus());
+  bus.on('sync:status', _onSyncStatus);
 }
 
 export function unmount() {
-  bus.off('sync:status', () => _checkSyncStatus());
+  // H-1 Fix: properly remove named listener (not a new anonymous function)
+  bus.off('sync:status', _onSyncStatus);
 }
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
@@ -58,6 +65,7 @@ function _loadSettings() {
     const stored = JSON.parse(localStorage.getItem('fit_elite_settings') ?? '{}');
     _settings = { ...DEFAULTS, ...stored };
     _lang = _settings.lang;
+    if (_settings.unit) document.documentElement.setAttribute('data-unit', _settings.unit);
   } catch (_) {
     _settings = { ...DEFAULTS };
   }
@@ -109,11 +117,15 @@ function _renderHero(totalWorkouts, totalVolume, coreUsage) {
   const mostUsedCore = Object.entries(coreUsage)
     .filter(([k]) => k !== 'id')
     .sort((a, b) => b[1] - a[1])[0]?.[0]?.replace('core_', 'Core ')?.toUpperCase() ?? '—';
+  const name   = _settings.name || DEFAULTS.name;
+  const letter = name.charAt(0).toUpperCase();
   return `
     <div class="p-hero">
-      <div class="p-av">G</div>
-      <div>
-        <div class="p-name">Gio</div>
+      <div class="p-av" id="profile-av" style="cursor:pointer;position:relative" title="${_t('Tap to edit name', 'Нажми для изменения имени')}">${letter}</div>
+      <div style="flex:1">
+        <div class="p-name" id="profile-name-wrap">
+          <span id="profile-name-display" style="cursor:pointer" title="${_t('Tap to edit', 'Нажмите для редактирования')}">${_esc(name)}</span>
+        </div>
         <div class="p-meta">
           <span>${totalWorkouts} ${_t('workouts', 'тренировок')}</span>
           <span class="p-meta-dot">·</span>
@@ -162,33 +174,21 @@ function _renderInterface() {
 
 function _renderTraining() {
   return `
+    ${_renderToggleRow('body_metrics', 'monitor_weight', _t('Body stats tracking', 'Отслеживание тела'), _t('Enable weight & metrics tab', 'Включить вкладку'))}
     ${_renderToggleRow('weighted_toggle', 'fitness_center', _t('Weighted toggle', 'Утяжелённый toggle'), _t('Pull Ups · Hyperextension', 'Подтягивания · Гиперэкстензия'))}
     ${_renderToggleRow('ai_coach', 'auto_awesome', _t('AI Coach', 'AI Тренер'), _t('Level 2 contextual nudges', 'Контекстные подсказки'))}
     ${_renderToggleRow('auto_advance', 'skip_next', _t('Auto-advance', 'Авто-переход'), _t('Next exercise after last set', 'Следующее после последнего подхода'))}
     ${_renderToggleRow('rpe_field', 'psychology', _t('Show RPE field', 'Показать RPE'), _t('Rate of perceived exertion', 'Оценка нагрузки'))}
     ${_renderToggleRow('progressive', 'bolt', _t('Progressive overload', 'Прогрессивная перегрузка'), _t('+2.5 kg suggestion after PR', '+2.5 кг после рекорда'))}
-    <div class="s-row">
-      <div class="s-left">
-        <span class="material-symbols-outlined s-icon">timer</span>
-        <div>
-          <div class="s-label">${_t('Default rest timer', 'Таймер отдыха')}</div>
-          <div class="s-sub">${_settings.rest_timer_sec}s</div>
-        </div>
-      </div>
-      <div class="stepper" data-key="rest_timer_sec" data-step="15" data-min="30" data-max="300">
-        <button class="step-btn" data-dir="-1">−</button>
-        <span class="step-val">${_settings.rest_timer_sec}s</span>
-        <button class="step-btn" data-dir="1">+</button>
-      </div>
-    </div>
+
     <div class="s-row">
       <div class="s-left">
         <span class="material-symbols-outlined s-icon">straighten</span>
         <div><div class="s-label">${_t('Units', 'Единицы')}</div></div>
       </div>
       <div class="unit-toggle">
-        <div class="unit-opt on" data-unit="kg">kg</div>
-        <div class="unit-opt" data-unit="lbs">lbs</div>
+        <div class="unit-opt ${_settings.unit === 'kg' ? 'on' : ''}" data-unit="kg">kg</div>
+        <div class="unit-opt ${_settings.unit === 'lbs' ? 'on' : ''}" data-unit="lbs">lbs</div>
       </div>
     </div>
   `;
@@ -203,6 +203,20 @@ function _renderTimerSettings() {
   ];
   return `
     ${_renderToggleRow('auto_pause', 'pause_circle', _t('Auto-pause on exit', 'Авто-пауза при выходе'), _t('Pause when app backgrounds', 'Пауза при сворачивании'))}
+    <div class="s-row" id="timer-settings">
+      <div class="s-left">
+        <span class="material-symbols-outlined s-icon">timer</span>
+        <div>
+          <div class="s-label">${_t('Default rest timer', 'Таймер отдыха')}</div>
+          <div class="s-sub">${_settings.rest_timer_sec}s</div>
+        </div>
+      </div>
+      <div class="stepper" data-key="rest_timer_sec" data-step="15" data-min="30" data-max="300">
+        <button class="step-btn" data-dir="-1">−</button>
+        <span class="step-val">${_settings.rest_timer_sec}s</span>
+        <button class="step-btn" data-dir="1">+</button>
+      </div>
+    </div>
     ${rows.map(r => `
       <div class="s-row">
         <div class="s-left">
@@ -247,7 +261,12 @@ function _renderDevice(recoveryCode) {
           <div class="s-sub" id="sync-status-sub">${_t('Checking…', 'Проверяем…')}</div>
         </div>
       </div>
-      <div class="sync-dot" id="sync-dot"></div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="icon-btn-sm" id="manual-sync-btn" style="color:var(--t2); cursor:pointer; background:none; border:none;">
+          <span class="material-symbols-outlined" style="font-size:18px">sync</span>
+        </button>
+        <div class="sync-dot" id="sync-dot"></div>
+      </div>
     </div>
     <div class="s-row">
       <div class="s-left">
@@ -313,6 +332,40 @@ function _renderToggleRow(key, icon, label, sub = '') {
 // ─── Bind ─────────────────────────────────────────────────────────────────────
 
 function _bind() {
+  // ── Name tap-to-edit ─────────────────────────────────────────────────────
+  const _startNameEdit = () => {
+    const wrap = _el?.querySelector('#profile-name-wrap');
+    if (!wrap || wrap.querySelector('input')) return; // already editing
+    const current = _settings.name || DEFAULTS.name;
+    wrap.innerHTML = `
+      <input id="profile-name-input"
+        type="text" value="${_esc(current)}"
+        maxlength="32" autocomplete="off"
+        style="background:transparent;border:none;border-bottom:1.5px solid var(--p);
+               outline:none;font-size:1.375rem;font-weight:900;color:var(--t1);
+               letter-spacing:-.025em;font-family:'Manrope',sans-serif;
+               width:100%;padding-bottom:2px;"
+      />
+    `;
+    const inp = wrap.querySelector('#profile-name-input');
+    inp?.focus();
+    inp?.select();
+
+    const _save = () => {
+      const val = inp?.value?.trim();
+      if (val && val.length > 0) {
+        _set('name', val);
+        bus.emit('settings:changed', { name: val });
+      }
+      _render(); // re-render to show saved name + update avatar letter
+    };
+    inp?.addEventListener('keydown', e => { if (e.key === 'Enter') _save(); if (e.key === 'Escape') _render(); });
+    inp?.addEventListener('blur', _save);
+  };
+
+  _el.querySelector('#profile-name-display')?.addEventListener('click', _startNameEdit);
+  _el.querySelector('#profile-av')?.addEventListener('click', _startNameEdit);
+
   _el.querySelectorAll('[data-tog]').forEach(el => {
     el.addEventListener('click', () => {
       const key = el.dataset.tog;
@@ -320,6 +373,7 @@ function _bind() {
       el.classList.toggle('on', !!_settings[key]);
     });
   });
+
 
   _el.querySelectorAll('[data-theme]').forEach(el => {
     el.addEventListener('click', () => {
@@ -357,6 +411,20 @@ function _bind() {
         if (sub) sub.textContent = val.textContent;
       });
     });
+  });
+
+  _el.querySelectorAll('[data-unit]').forEach(el => {
+    el.addEventListener('click', () => {
+      const unit = el.dataset.unit;
+      _set('unit', unit);
+      document.documentElement.setAttribute('data-unit', unit);
+      _el.querySelectorAll('[data-unit]').forEach(o => o.classList.toggle('on', o.dataset.unit === unit));
+    });
+  });
+
+  _el.querySelector('#manual-sync-btn')?.addEventListener('click', () => {
+    _showToast(_t('Syncing...', 'Синхронизация...'), 'info');
+    if (typeof sync.flush === 'function') sync.flush();
   });
 
   _el.querySelector('#copy-code')?.addEventListener('click', async () => {
@@ -430,7 +498,22 @@ async function _checkSyncStatus() {
 
   const s = map[status] ?? map.idle;
   dot.className   = `sync-dot ${s.cls}`;
-  sub.textContent = _lang === 'ru' ? s.ru : s.en;
+  
+  let txt = _lang === 'ru' ? s.ru : s.en;
+  if (status === 'synced' || status === 'idle') {
+    const rawTime = localStorage.getItem('fit_elite_last_sync_date');
+    if (rawTime) {
+      try {
+        const d = new Date(rawTime);
+        const tf = d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        const df = d.toLocaleDateString([], {day: 'numeric', month: 'short'});
+        const wasToday = new Date().toDateString() === d.toDateString();
+        const str = wasToday ? tf : `${df}, ${tf}`;
+        txt += ` · ${str}`;
+      } catch(e) {}
+    }
+  }
+  sub.textContent = txt;
 }
 
 // ─── Device ID ────────────────────────────────────────────────────────────────
@@ -502,6 +585,8 @@ function _showToast(msg, type = 'ok') {
 }
 
 function _t(en, ru) { return _lang === 'ru' ? ru : en; }
+function _esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
 
 export function getSettings() { return { ..._settings }; }
 export default { mount, unmount, getSettings };
+

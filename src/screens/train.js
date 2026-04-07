@@ -21,6 +21,7 @@
 import session, { STATE } from '../core/session.js';
 import { bus } from '../core/bus.js';
 import templates from '../data/templates.json' with { type: 'json' };
+import units from '../core/units.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -35,29 +36,45 @@ const PPL_COLOR = {
 let _el          = null;   // root DOM element
 let _lang        = 'en';
 let _searchQuery = '';
+let _searchExpanded = {};
 let _activeChip  = 'all';  // для фильтра упражнений
 let _activeSub   = null;   // для под-фильтра
 let _finishStep  = 0;      // 0=idle, 1=first tap, 2=confirmed
 let _finishTimer = null;
+let _skipCount   = 0;      // tracks how many exercises were skipped
+
+let _fabTaps     = 0;
+let _fabTimer    = null;
 
 // Timer state
 let _timerSecs   = 90;
 let _timerMax    = 90;
 let _timerRunning= false;
 let _timerTick   = null;
+let _timerMinimized = false;
 
 // Set logger state (mirrors session in-memory)
 let _setDraftKg   = '';
 let _setDraftReps = '';
 let _setDraftRpe  = '';
+let _setDraftIsWeighted = false;
+
+// C-3 Fix: in-memory workouts cache (invalidated on session:saved)
+let _workoutsCache = null;
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
-export function mount(el, lang = 'en') {
+export function mount(el, lang = 'en', args = {}) {
   _el   = el;
   _lang = lang;
+  // H-3 Fix: always reset timer state when mounting (prevent stale state between sessions)
+  _resetTimerState();
   _render();
   _bindBus();
+
+  if (args.action === 'open_sheet' && args.ppl) {
+    setTimeout(() => _openPPLSheet(args.ppl), 100);
+  }
 }
 
 export function unmount() {
@@ -72,7 +89,7 @@ function _bindBus() {
   bus.on('session:exercise_changed', _renderActive);
   bus.on('session:state_changed',    _renderActive);
   bus.on('session:set_logged',       _renderSetList);
-  bus.on('session:saved',            _render);
+  bus.on('session:saved',            _onSessionSaved);
   bus.on('session:discarded',        _render);
 }
 
@@ -81,8 +98,22 @@ function _unbindBus() {
   bus.off('session:exercise_changed', _renderActive);
   bus.off('session:state_changed',    _renderActive);
   bus.off('session:set_logged',       _renderSetList);
-  bus.off('session:saved',            _render);
+  bus.off('session:saved',            _onSessionSaved);
   bus.off('session:discarded',        _render);
+}
+
+// C-3 Fix: invalidate workouts cache on save
+function _onSessionSaved() {
+  _workoutsCache = null;
+  _render();
+}
+
+// Get workouts with simple module-level cache (invalidated above)
+async function _getCachedWorkouts() {
+  if (!_workoutsCache) {
+    _workoutsCache = await db.getWorkouts();
+  }
+  return _workoutsCache;
 }
 
 // ─── Top-level render ────────────────────────────────────────────────────────
@@ -246,7 +277,8 @@ function _renderExerciseList() {
     } else if (_activeSub) {
       filtered = filtered.filter(e => e.muscles.includes(_activeSub));
     } else {
-      const chipMuscles = CHIP_DEFS.find(c => c.id === _activeChip)?.sub?.map(s => s.id) ?? [];
+      const chipDef = templates.muscle_chips[_activeChip];
+      const chipMuscles = chipDef?.sub ?? [];
       filtered = filtered.filter(e => e.muscles.some(m => chipMuscles.includes(m)));
     }
   }
@@ -255,25 +287,54 @@ function _renderExerciseList() {
     return `<div class="empty-state">${_t('No exercises found', 'Упражнения не найдены')}</div>`;
   }
 
-  const pplType = _activeChip !== 'all' && _activeChip !== 'core' ? _activeChip : null;
-  const color   = pplType ? PPL_COLOR[pplType] : 'var(--t3)';
+  const byGroup = { push:[], pull:[], legs:[], core:[], other:[] };
+  filtered.forEach(e => {
+    let mg = e.muscles?.[0] || 'other';
+    let grp = 'other';
+    if (['chest','triceps','front_delt','side_delt'].includes(mg)) grp = 'push';
+    else if (['back','rear_delt','biceps','traps'].includes(mg)) grp = 'pull';
+    else if (['quads','hamstrings','glutes','calves','adductors','abductors'].includes(mg)) grp = 'legs';
+    else if (['core'].includes(mg)) grp = 'core';
+    byGroup[grp].push(e);
+  });
 
-  return `
-    <div class="section-lbl">${_t('Exercises', 'Упражнения')} <span style="color:var(--t3);font-weight:400">${filtered.length}</span></div>
-    <div class="ex-list">
-      ${filtered.map(e => `
-        <div class="ex-item" data-ex="${e.id}">
-          <div class="ex-item-bar" style="background:${color}"></div>
-          <div class="ex-item-body">
-            <div class="ex-item-name">${_lang === 'ru' ? e.name_ru : e.name}</div>
-            <div class="ex-item-meta">${e.muscles.join(' · ')} · ${e.equipment}</div>
+  const order = ['push', 'pull', 'legs', 'core', 'other'];
+  
+  let html = `<div class="section-lbl">${_t('Exercises', 'Упражнения')} <span style="color:var(--t3);font-weight:400">${filtered.length}</span></div><div class="ex-list">`;
+  
+  for (const g of order) {
+    const list = byGroup[g];
+    if (!list.length) continue;
+    const gName = g === 'push' ? _t('Push','Пуш') : g === 'pull' ? _t('Pull','Пул') : g === 'legs' ? _t('Legs','Ноги') : g === 'core' ? _t('Core','Кор') : _t('Other','Другое');
+    
+    const isExpanded = _searchExpanded[g] || _searchQuery.length > 0;
+    
+    html += `<div class="search-group-hdr tgt-grp" data-grp="${g}" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer; user-select:none">
+               ${gName}
+               <span class="material-symbols-outlined" style="font-size:18px; transition:transform var(--tb)">${isExpanded ? 'expand_less' : 'expand_more'}</span>
+             </div>`;
+             
+    if (isExpanded) {
+      html += `<div style="animation: fade-in var(--tb) var(--e1)">`;
+      html += list.map(e => {
+        const color = PPL_COLOR[g] || 'var(--t3)';
+        return `
+          <div class="ex-item" data-ex="${e.id}">
+            <div class="ex-item-bar" style="background:${color}"></div>
+            <div class="ex-item-body">
+              <div class="ex-item-name">${_lang === 'ru' ? e.name_ru : e.name}</div>
+              <div class="ex-item-meta">${e.muscles.join(' · ')} · ${e.equipment}</div>
+            </div>
+            ${e.weighted_toggle ? `<span class="material-symbols-outlined ex-item-tag" title="Weighted">fitness_center</span>` : ''}
+            ${e.timed ? `<span class="material-symbols-outlined ex-item-tag" title="Timed">timer</span>` : ''}
           </div>
-          ${e.weighted_toggle ? `<span class="material-symbols-outlined ex-item-tag" title="Weighted">fitness_center</span>` : ''}
-          ${e.timed ? `<span class="material-symbols-outlined ex-item-tag" title="Timed">timer</span>` : ''}
-        </div>
-      `).join('')}
-    </div>
-  `;
+        `;
+      }).join('');
+      html += `</div>`;
+    }
+  }
+  html += `</div>`;
+  return html;
 }
 
 // ─── Bottom sheet (Today's Plan) ─────────────────────────────────────────────
@@ -366,6 +427,15 @@ function _bindBrowse() {
   _el.querySelector('#search-clear')?.addEventListener('click', () => {
     _searchQuery = '';
     _renderBrowse();
+  });
+  
+  // Collapse toggle
+  _el.querySelectorAll('.tgt-grp').forEach(hdr => {
+    hdr.addEventListener('click', (e) => {
+      const grp = e.currentTarget.dataset.grp;
+      _searchExpanded[grp] = !_searchExpanded[grp];
+      _renderBrowse();
+    });
   });
 
   // Sheet already open
@@ -568,8 +638,8 @@ function _renderTopBar(snap) {
       </div>
       <div style="display:flex;align-items:center;gap:7px">
         <button class="fin-btn ${_finishStep === 1 ? 'fin-btn-confirm' : ''}" id="fin-btn">
-          ${_finishStep === 0
-            ? _t('Finish', 'Завершить')
+          ${_finishStep === 1
+            ? _t('Skip Ex?', 'Пропустить?')
             : _t('Finish', 'Завершить')}
         </button>
       </div>
@@ -649,6 +719,18 @@ function _renderTimer() {
   const displayClass = state === 'active' ? 'active'
     : state === 'warning' ? 'warning' : '';
 
+  if (_timerMinimized) {
+    const pct   = Math.max(0, _timerSecs / _timerMax);
+    return `
+      <div class="tmr-card-ultra" id="tmr-card">
+        <div class="tmr-ultra-fill ${state}" id="tmr-ultra-fill" style="transform: scaleX(${pct})"></div>
+        <div class="tmr-ultra-text ${state}" id="tmr-display">
+          ${_timerSecs <= 0 ? 'GO!' : _fmtTime(_timerSecs)}
+        </div>
+      </div>
+    `;
+  }
+
   return `
     <div class="tmr-card ${state === 'active' ? 'active' : state === 'warning' ? 'warning' : ''}" id="tmr-card">
       <span class="tmr-label">${_t('Rest Timer', 'Таймер отдыха')}</span>
@@ -687,12 +769,18 @@ function _renderSetSection(snap) {
 
   return `
     <div class="set-sect">
-      <div class="set-hdr">
+      <div class="set-hdr" style="display:flex; align-items:center;">
         <span class="set-title">${_t('Sets', 'Подходы')}</span>
-        <span class="set-add" id="set-add">
-          <span class="material-symbols-outlined" style="font-size:14px">add</span>
-          ${_t('Add Set', 'Добавить подход')}
-        </span>
+        <div style="margin-left:auto; display:flex; gap:16px; align-items:center;">
+          <span class="set-add" id="set-fill" style="color:var(--t3); display:flex; gap:4px; font-size:.4375rem; text-transform:uppercase" title="${_t('Fill from history', 'Заполнить из истории')}">
+            <span class="material-symbols-outlined" style="font-size:14px">history</span>
+            ${_t('Fill', 'Заполнить')}
+          </span>
+          <span class="set-add" id="set-add" style="display:flex; gap:4px; font-size:.4375rem; text-transform:uppercase">
+            <span class="material-symbols-outlined" style="font-size:14px">add</span>
+            ${_t('Add', 'Добавить')}
+          </span>
+        </div>
       </div>
 
       <div class="set-cols">
@@ -704,13 +792,13 @@ function _renderSetSection(snap) {
       </div>
 
       <div class="set-list" id="set-list">
-        ${Array.from({ length: totalSets }, (_, i) => _renderSetRow(i, doneSets, activeIdx)).join('')}
+        ${Array.from({ length: totalSets }, (_, i) => _renderSetRow(i, doneSets, activeIdx, snap)).join('')}
       </div>
     </div>
   `;
 }
 
-function _renderSetRow(i, doneSets, activeIdx) {
+function _renderSetRow(i, doneSets, activeIdx, snap) {
   const num = String(i + 1).padStart(2, '0');
 
   if (i < doneSets.length) {
@@ -721,8 +809,8 @@ function _renderSetRow(i, doneSets, activeIdx) {
       <div class="set-row ${isPR ? 'pr' : 'done'}" data-set-idx="${i}">
         <div class="set-num">${num}</div>
         <div class="set-val-wrap">
-          <input class="set-in" type="number" value="${s.kg}" disabled/>
-          <span class="set-unit">${_t('kg','кг')}</span>
+          <input class="set-in" type="number" value="${units.displayWeight(s.kg)}" disabled/>
+          <span class="set-unit">${units.getUnit()}</span>
         </div>
         <div class="set-val-wrap">
           <input class="set-in" type="number" value="${s.reps}" disabled/>
@@ -742,30 +830,38 @@ function _renderSetRow(i, doneSets, activeIdx) {
   if (i === activeIdx) {
     // Active row - с зелёной рамкой
     const prevSet = doneSets[doneSets.length - 1];
+    const def = snap.current_exercise_def;
+    const canBW = def.equipment === 'bodyweight' || def.weighted_toggle;
+    const hideKg = canBW && !_setDraftIsWeighted;
+
     return `
-      <div class="set-row active" id="active-row">
+      <div class="set-row active" id="active-row" style="flex-wrap:wrap">
         <div class="set-num active-n">${num}</div>
-        <div class="set-val-wrap">
+        <div class="set-val-wrap" style="transition:opacity var(--tb); opacity:${hideKg ? '0' : '1'}; pointer-events:${hideKg ? 'none' : 'auto'}">
           <input class="set-in active-i" id="draft-kg" type="number"
-            placeholder="${_t('kg','кг')}" value="${_esc(_setDraftKg)}" inputmode="decimal"/>
-          <span class="set-unit" style="color:var(--p)">${_t('kg','кг')}</span>
-          ${prevSet ? `<span class="set-prev p-ok">prev ${prevSet.kg}</span>` : ''}
+            placeholder="${units.getUnit()}" value="${_esc(_setDraftKg)}" inputmode="decimal" step="${units.isLbs() ? '5' : '2.5'}" min="0"/>
+          ${prevSet ? `<span class="set-prev p-ok" style="margin-top:2px">prev ${units.displayWeight(prevSet.kg)}</span>` : ''}
         </div>
         <div class="set-val-wrap">
           <input class="set-in active-i" id="draft-reps" type="number"
             placeholder="${_t('reps','пов')}" value="${_esc(_setDraftReps)}" inputmode="numeric"/>
-          <span class="set-unit" style="color:var(--p)">${_t('reps','пов')}</span>
-          ${prevSet ? `<span class="set-prev p-ok">prev ${prevSet.reps}</span>` : ''}
+          ${prevSet ? `<span class="set-prev p-ok" style="margin-top:2px">prev ${prevSet.reps}</span>` : ''}
         </div>
         <div class="set-val-wrap">
           <input class="set-in active-i" id="draft-rpe" type="number"
             placeholder="rpe" value="${_esc(_setDraftRpe)}" min="1" max="10" inputmode="numeric"/>
-          <span class="set-unit" style="color:var(--p)">rpe</span>
-          ${prevSet?.rpe != null ? `<span class="set-prev">prev ${prevSet.rpe}</span>` : ''}
+          ${prevSet?.rpe != null ? `<span class="set-prev" style="margin-top:2px">prev ${prevSet.rpe}</span>` : ''}
         </div>
         <button class="lock-btn" data-lock-active="true" title="${_t('Lock set', 'Заблокировать')}">
           <span class="material-symbols-outlined" style="font-size:14px;color:var(--p)">lock_open</span>
         </button>
+
+        ${canBW ? `
+          <label style="flex-basis:100%; display:flex; align-items:center; gap:8px; margin-top:8px; padding-top:8px; border-top:1px solid rgba(0,200,110,.15); cursor:pointer">
+            <input type="checkbox" id="bw-toggle" ${_setDraftIsWeighted ? 'checked' : ''} style="accent-color:var(--p);width:16px;height:16px">
+            <span style="font-size:.625rem; font-weight:700; color:var(--t2)">${_t('Weighted', 'Отягощение')}</span>
+          </label>
+        ` : ''}
       </div>
     `;
   }
@@ -806,7 +902,7 @@ function _renderVolumeSummary(snap) {
   return `
     <div class="vol-summary">
       <div class="vol-item">
-        <div class="vol-val" style="color:var(--p)">${total.toLocaleString()}<span class="vol-unit">kg</span></div>
+        <div class="vol-val" style="color:var(--p)">${units.displayWeight(total).toLocaleString()}<span class="vol-unit">${units.getUnit()}</span></div>
         <div class="vol-lbl">${_t('Volume', 'Объём')}</div>
       </div>
       <div class="vol-item">
@@ -847,7 +943,7 @@ function _renderSummaryModal(snap) {
           </div>
           <div class="modal-row">
             <span class="modal-key">${_t('Volume', 'Объём')}</span>
-            <span class="modal-val">${total.toLocaleString()} kg</span>
+            <span class="modal-val">${units.displayWeight(total).toLocaleString()} ${units.getUnit()}</span>
           </div>
           <div class="modal-row">
             <span class="modal-key">${_t('Sets logged', 'Подходов')}</span>
@@ -874,14 +970,11 @@ function _renderSummaryModal(snap) {
 // ─── Active bind ─────────────────────────────────────────────────────────────
 
 function _bindActive() {
-  // Back → pause + confirm
+  // H-4 Fix: Back button — pause workout and go Home; user returns via Dynamic Island tap
   _el.querySelector('#back-btn')?.addEventListener('click', () => {
     session.pause();
-    if (confirm(_t('Pause workout?', 'Пауза?'))) {
-      // stay paused
-    } else {
-      session.resume();
-    }
+    _showToast(_t('Workout paused — tap Island to return', 'Пауза — нажми на остров для возврата'), 'info');
+    bus.emit('nav:switch', { screen: 'home' });
   });
 
   // Finish button — double confirm
@@ -891,10 +984,34 @@ function _bindActive() {
   _el.querySelector('#fab-btn')?.addEventListener('click', _handleFinishSet);
 
   // Timer controls
-  _el.querySelector('#tmr-minus')?.addEventListener('click', () => _addTime(-30));
-  _el.querySelector('#tmr-plus')?.addEventListener('click', () => _addTime(30));
-  _el.querySelector('#tmr-skip')?.addEventListener('click', _skipTimer);
-  _el.querySelector('#tmr-play')?.addEventListener('click', _toggleTimer);
+  _el.querySelector('#tmr-minus')?.addEventListener('click', (e) => { e.stopPropagation(); _addTime(-30); });
+  _el.querySelector('#tmr-plus')?.addEventListener('click', (e) => { e.stopPropagation(); _addTime(30); });
+  _el.querySelector('#tmr-skip')?.addEventListener('click', (e) => { e.stopPropagation(); _skipTimer(); });
+  _el.querySelector('#tmr-play')?.addEventListener('click', (e) => { e.stopPropagation(); _toggleTimer(); });
+
+  const tmrCard = _el.querySelector('#tmr-card');
+  if (tmrCard) {
+    let pressTimer = null;
+    let isLong = false;
+    tmrCard.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('button')) return;
+      isLong = false;
+      pressTimer = setTimeout(() => {
+        isLong = true;
+        bus.emit('nav:switch', { screen: 'profile' });
+      }, 600);
+    });
+    tmrCard.addEventListener('pointerup', (e) => {
+      if (e.target.closest('button')) return;
+      clearTimeout(pressTimer);
+      if (!isLong) {
+        _timerMinimized = !_timerMinimized;
+        _renderActive();
+      }
+    });
+    tmrCard.addEventListener('pointercancel', () => clearTimeout(pressTimer));
+    tmrCard.addEventListener('pointerleave', () => clearTimeout(pressTimer));
+  }
 
   // Draft inputs
   _el.querySelector('#draft-kg')?.addEventListener('input', e => { _setDraftKg = e.target.value; });
@@ -903,7 +1020,58 @@ function _bindActive() {
 
   // Add set
   _el.querySelector('#set-add')?.addEventListener('click', () => {
-    // session exposes no addSet — handled by next exercise logic
+    // M-7 Fix: informative feedback instead of silent noop
+    _showToast(_t('Extra sets: finish current set first', 'Сначала заверши текущий подход'), 'info');
+  });
+
+  // C-3 Fix: Fill button reads from IndexedDB (not nonexistent localStorage cache)
+  _el.querySelector('#set-fill')?.addEventListener('click', async () => {
+    const snap = session.getSnapshot();
+    const eid  = snap.resolved_exercise_id;
+    if (!eid) return;
+
+    const allWorkouts = await _getCachedWorkouts();
+    let lastSets = [];
+    for (const w of allWorkouts) {
+      if (w.sets) {
+        const exSets = w.sets.filter(s => s.exercise_id === eid);
+        if (exSets.length > 0) { lastSets = exSets; break; }
+      }
+    }
+
+    if (lastSets.length > 0) {
+      const doneSets = snap.sets.filter(s => s.exercise_id === eid).length;
+      const target   = lastSets[doneSets] || lastSets[lastSets.length - 1];
+      if (target) {
+        _setDraftKg   = target.kg;
+        _setDraftReps = target.reps;
+        _setDraftRpe  = target.rpe || '';
+        _setDraftIsWeighted = _setDraftKg > 0;
+
+        const inKg   = _el.querySelector('#draft-kg');
+        const inReps = _el.querySelector('#draft-reps');
+        const inRpe  = _el.querySelector('#draft-rpe');
+        if (inKg)   inKg.value   = units.displayWeight(_setDraftKg);
+        if (inReps) inReps.value = _setDraftReps;
+        if (inRpe)  inRpe.value  = _setDraftRpe;
+
+        const def = snap.current_exercise_def;
+        if (def && (def.equipment === 'bodyweight' || def.weighted_toggle)) {
+          _renderSetList();
+        }
+        _showToast(_t('Filled from history', 'Заполнено из истории'), 'ok');
+      }
+    } else {
+      _showToast(_t('No history for this exercise', 'Нет истории по упражнению'), 'info');
+    }
+  });
+
+  _el.querySelector('#bw-toggle')?.addEventListener('change', (e) => {
+    _setDraftIsWeighted = e.target.checked;
+    if (!_setDraftIsWeighted) {
+      _setDraftKg = '';
+    }
+    _renderSetList();
   });
 
   // Set rows
@@ -912,10 +1080,12 @@ function _bindActive() {
   // Summary modal
   _el.querySelector('#modal-save')?.addEventListener('click', async () => {
     await session.save();
+    bus.emit('nav:switch', { screen: 'home' });
   });
   _el.querySelector('#modal-discard')?.addEventListener('click', () => {
     if (confirm(_t('Discard workout? Data will be lost.', 'Отменить тренировку? Данные удалятся.'))) {
       session.discard();
+      bus.emit('nav:switch', { screen: 'home' });
     }
   });
 }
@@ -929,8 +1099,8 @@ function _bindSetRows() {
       const lockActive = btn.dataset.lockActive;
 
       if (lockActive !== undefined) {
-        // Lock current active set - mark as done without adding new
-        _showToast(_t('Set locked', 'Подход заблокирован'), 'info');
+        // Lock current active set - logs it directly!
+        _handleFinishSet(true);
       } else if (lockIdx !== undefined) {
         // Unlock a done/locked set for editing
         const row = btn.closest('.set-row');
@@ -966,7 +1136,7 @@ function _unlockSetRow(row) {
   row.innerHTML = `
     <div class="set-num active-n">${String(idx + 1).padStart(2,'0')}</div>
     <div class="set-val-wrap">
-      <input class="set-in active-i edit-kg" type="number" value="${s.kg}" inputmode="decimal"/>
+      <input class="set-in active-i edit-kg" type="number" value="${s.kg}" inputmode="decimal" step="2.5" min="0"/>
       <span class="set-unit" style="color:var(--p)">${_t('kg','кг')}</span>
     </div>
     <div class="set-val-wrap">
@@ -977,32 +1147,69 @@ function _unlockSetRow(row) {
       <input class="set-in active-i edit-rpe" type="number" value="${s.rpe ?? ''}" inputmode="numeric"/>
       <span class="set-unit" style="color:var(--p)">rpe</span>
     </div>
-    <button class="edit-save-btn" data-edit-idx="${idx}">
-      <span class="material-symbols-outlined fi" style="font-size:16px;color:var(--p)">check</span>
+    <button class="edit-save-btn lock-btn" data-edit-idx="${idx}" style="cursor:pointer;background:transparent;border:none">
+      <span class="material-symbols-outlined fi" style="font-size:16px;color:var(--p)">lock_open</span>
     </button>
   `;
 
   row.querySelector('.edit-save-btn')?.addEventListener('click', () => {
-    const kg   = parseFloat(row.querySelector('.edit-kg')?.value) || s.kg;
+    const kg   = parseFloat(row.querySelector('.edit-kg')?.value)    || s.kg;
     const reps = parseInt(row.querySelector('.edit-reps')?.value, 10) || s.reps;
-    const rpe  = parseFloat(row.querySelector('.edit-rpe')?.value) || s.rpe;
-    // Mutate session sets directly (allowed — not a DB write)
-    const allSets = session.getSnapshot().sets;
-    const target  = allSets.filter(x => x.exercise_id === snap.resolved_exercise_id)[idx];
-    if (target) { target.kg = kg; target.reps = reps; target.rpe = rpe; }
+    const rpe  = parseFloat(row.querySelector('.edit-rpe')?.value)   || s.rpe;
+    // C-4 Fix: use official session.editSet() instead of direct mutation
+    session.editSet(snap.resolved_exercise_id, idx, { kg, reps, rpe });
     _renderSetList();
   });
 }
 
+
 // ─── Finish set ──────────────────────────────────────────────────────────────
 
-function _handleFinishSet() {
-  const kg   = parseFloat(_el.querySelector('#draft-kg')?.value);
+function _handleFinishSet(fromLock = false) {
+  if (fromLock) {
+    _logActiveSetAndAdvance();
+    return;
+  }
+
+  const fab = _el.querySelector('#fab-btn');
+  _fabTaps++;
+
+  if (_fabTaps === 1) {
+    // Show FINISH state temporarily
+    if (fab) {
+      fab.innerHTML = `<span class="material-symbols-outlined fi">keyboard_double_arrow_right</span> FINISH`;
+      // Restore state after 600ms if no second tap
+      _fabTimer = setTimeout(() => {
+        _fabTaps = 0;
+        if (_el && _el.contains(fab)) {
+          fab.innerHTML = `<span class="material-symbols-outlined fi">check_circle</span> ${_t('Finish Set', 'Завершить подход')}`;
+        }
+      }, 600);
+    }
+
+    _logActiveSetAndAdvance();
+  } else if (_fabTaps >= 2) {
+    // Ignore double tap on FAB now that pink button handles it
+    _fabTaps = 1;
+  }
+}
+
+function _logActiveSetAndAdvance() {
+  let kgStr = _el.querySelector('#draft-kg')?.value;
+  let kg = units.parseWeight(kgStr);
   const reps = parseInt(_el.querySelector('#draft-reps')?.value, 10);
   const rpe  = parseFloat(_el.querySelector('#draft-rpe')?.value) || null;
 
-  if (!kg || !reps) {
-    _el.querySelector('#draft-kg')?.classList.add('input-error');
+  const snap     = session.getSnapshot();
+  const def      = snap.current_exercise_def;
+  const canBW    = def && (def.equipment === 'bodyweight' || def.weighted_toggle);
+
+  if (canBW && !_setDraftIsWeighted) {
+    kg = 0; // bodyweight
+  }
+
+  if ((isNaN(kg) || kg <= 0) && (!canBW || _setDraftIsWeighted)) {
+    if ((isNaN(kg) || kg <= 0) && (!canBW || _setDraftIsWeighted)) _el.querySelector('#draft-kg')?.classList.add('input-error');
     _el.querySelector('#draft-reps')?.classList.add('input-error');
     return;
   }
@@ -1011,21 +1218,20 @@ function _handleFinishSet() {
   session.logSet({ kg, reps, rpe });
 
   // Check if all sets done for this exercise
-  const snap     = session.getSnapshot();
-  const doneSets = snap.sets.filter(s => s.exercise_id === snap.resolved_exercise_id).length;
+  const doneSets = snap.sets.filter(s => s.exercise_id === snap.resolved_exercise_id).length + 1; // +1 since we just logged
   const totalSets= snap.current_exercise?.sets ?? 0;
 
   if (doneSets >= totalSets) {
     // Auto-advance after short delay
     setTimeout(() => session.nextExercise(), 600);
+  } else {
+    // Restart rest timer
+    _timerSecs   = _timerMax;
+    _timerRunning= true;
+    clearInterval(_timerTick);
+    _timerTick = setInterval(_tickTimer, 1000);
+    _updateTimerUI();
   }
-
-  // Restart rest timer
-  _timerSecs   = _timerMax;
-  _timerRunning= true;
-  clearInterval(_timerTick);
-  _timerTick = setInterval(_tickTimer, 1000);
-  _updateTimerUI();
 }
 
 // ─── Finish workout ──────────────────────────────────────────────────────────
@@ -1037,20 +1243,36 @@ function _handleFinish() {
   if (_finishStep === 0) {
     _finishStep = 1;
     btn.classList.add('fin-btn-confirm');
-    btn.textContent = _t('Finish', 'Завершить');
+    btn.textContent = _t('Skip Ex?', 'Пропустить?');
     clearTimeout(_finishTimer);
     _finishTimer = setTimeout(() => {
       _finishStep = 0;
-      btn.classList.remove('fin-btn-confirm');
-      btn.textContent = _t('Finish', 'Завершить');
+      if (btn) {
+        btn.classList.remove('fin-btn-confirm');
+        btn.textContent = _t('Finish', 'Завершить');
+      }
     }, 3000);
   } else if (_finishStep === 1) {
     _finishStep = 0;
     clearTimeout(_finishTimer);
-    _stopTimer();
-    // Move to SUMMARY via session state machine
-    session.completeStretch();
-    _renderActive();
+    btn.classList.remove('fin-btn-confirm');
+    btn.textContent = _t('Finish', 'Завершить');
+
+    _skipCount++;
+    
+    if (_skipCount >= 3) {
+      if (confirm(_t('Finish the entire workout early?', 'Завершить всю тренировку досрочно?'))) {
+        _skipCount = 0;
+        _stopTimer();
+        session.completeStretch();
+        _renderActive();
+        return;
+      } else {
+        _skipCount = 0; // reset to allow continuing
+      }
+    }
+    
+    session.nextExercise();
   }
 }
 
@@ -1068,6 +1290,26 @@ function _stopTimer() {
   _timerTick    = null;
   _timerRunning = false;
 }
+
+// H-3 Fix: called at mount() to prevent stale state from previous session
+function _resetTimerState() {
+  clearInterval(_timerTick);
+  _timerSecs      = 90;
+  _timerMax       = 90;
+  _timerRunning   = false;
+  _timerTick      = null;
+  _timerMinimized = false;
+  _setDraftKg     = '';
+  _setDraftReps   = '';
+  _setDraftRpe    = '';
+  _setDraftIsWeighted = false;
+  _finishStep     = 0;
+  _skipCount      = 0;
+  _fabTaps        = 0;
+  clearTimeout(_finishTimer);
+  clearTimeout(_fabTimer);
+}
+
 
 function _tickTimer() {
   if (!_timerRunning || _timerSecs <= 0) {
@@ -1108,6 +1350,7 @@ function _updateTimerUI() {
   const card    = _el?.querySelector('#tmr-card');
   const fill    = _el?.querySelector('#ring-fill');
   const ico     = _el?.querySelector('#tmr-ico');
+  const ultraFill = _el?.querySelector('#tmr-ultra-fill');
   if (!display) return;
 
   const state = _timerSecs <= 0 ? 'done'
@@ -1115,10 +1358,24 @@ function _updateTimerUI() {
     : _timerRunning ? 'active' : 'idle';
 
   display.textContent = _timerSecs <= 0 ? 'GO!' : _fmtTime(_timerSecs);
-  display.className   = `tmr-display ${state === 'active' ? 'active' : state === 'warning' ? 'warning' : ''}`;
+  if (_timerMinimized) {
+    display.className = `tmr-ultra-text ${state}`;
+  } else {
+    display.className = `tmr-display ${state === 'active' ? 'active' : state === 'warning' ? 'warning' : ''}`;
+  }
 
   if (card) {
-    card.className = `tmr-card ${state === 'active' ? 'active' : state === 'warning' ? 'warning' : ''}`;
+    if (_timerMinimized) {
+      card.className = `tmr-card-ultra`;
+    } else {
+      card.className = `tmr-card ${state === 'active' ? 'active' : state === 'warning' ? 'warning' : ''}`;
+    }
+  }
+
+  if (ultraFill) {
+    const pct = Math.max(0, _timerSecs / _timerMax);
+    ultraFill.style.transform = `scaleX(${pct})`;
+    ultraFill.className = `tmr-ultra-fill ${state}`;
   }
 
   if (fill) {

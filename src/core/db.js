@@ -163,6 +163,7 @@ async function getVolumeHistory() {
     date:        w.started_at.slice(0, 10),
     ppl_type:    w.ppl_type,
     volume_kg:   (w.sets ?? []).reduce((acc, s) => acc + (s.kg * s.reps), 0),
+    total_sets:  (w.sets ?? []).filter(s => s.reps > 0).length,
     elapsed_sec: w.elapsed_sec,
   }));
 }

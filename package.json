@@ -4,13 +4,10 @@
   "description": "Fit Elite - Progressive Web App Workout Tracker",
   "type": "module",
   "scripts": {
-    "dev": "http-server -p 3000 -c-1 --silent",
+    "dev": "http-server -p 5000 -c-1 --silent",
     "build": "echo 'No build step - static PWA'",
-    "preview": "http-server -p 8000 -c-1 --silent",
     "deploy": "vercel --prod",
-    "deploy:preview": "vercel",
-    "git:commit": "git add -A && git commit -m",
-    "git:push": "git push"
+    "deploy:preview": "vercel"
   },
   "keywords": [
     "fitness",

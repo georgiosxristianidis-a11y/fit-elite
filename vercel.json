@@ -1,13 +1,10 @@
 {
   "version": 2,
-  "name": "fit-elite-pwa",
-  "builds": [
-    {
-      "src": "index.html",
-      "use": "@vercel/static"
-    }
-  ],
   "routes": [
+    {
+      "src": "/env\\.js",
+      "dest": "/api/env.js"
+    },
     {
       "src": "/src/(.*)",
       "headers": {
@@ -18,8 +15,5 @@
       "src": "/(.*)",
       "dest": "/$1"
     }
-  ],
-  "github": {
-    "silent": false
-  }
+  ]
 }
