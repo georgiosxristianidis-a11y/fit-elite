@@ -101,6 +101,14 @@ async function _loadData() {
 
   // Auto-select PPL day based on next recommended
   if (_weekStats.next_type) _pplDay = _weekStats.next_type;
+
+  // Load saved variant (alternation — default to opposite of last used)
+  const varMap = _getVariantMap();
+  if (varMap[_pplDay]) {
+    _tmplVariant = varMap[_pplDay] === 'a' ? 'b' : 'a';
+    // legs has no _b
+    if (_pplDay === 'legs') _tmplVariant = 'a';
+  }
 }
 
 /**
@@ -483,7 +491,8 @@ function _bindHome() {
 
   // Start button → switch to Train + start session
   _el.querySelector('#start-btn')?.addEventListener('click', () => {
-    const tmplId = `${_pplDay}_a`;
+    const tmplId = `${_pplDay}_${_tmplVariant}`;
+    _saveVariant();
     bus.emit('nav:switch', { screen: 'train' });
     // Small delay to let Train screen mount
     setTimeout(() => session.start(tmplId), 80);
@@ -492,7 +501,7 @@ function _bindHome() {
   // Template editor
   _el.querySelector('#tmpl-settings-btn')?.addEventListener('click', (e) => {
     e.stopPropagation();
-    _openTemplateEditor(`${_pplDay}_a`);
+    _openTemplateEditor(`${_pplDay}_${_tmplVariant}`);
   });
 
 
@@ -520,6 +529,7 @@ function _bindHome() {
   _el.querySelectorAll('.variant-btn').forEach(el => {
     el.addEventListener('click', (e) => {
       _tmplVariant = e.currentTarget.dataset.variant;
+      _saveVariant();
       _render();
     });
   });
@@ -530,15 +540,12 @@ function _bindHome() {
     _render();
   });
 
-  // Open Full Plan Viewer inline (card tap)
+  // Open Full Plan Viewer (card body tap)
   _el.querySelector('#plan-preview-body')?.addEventListener('click', (e) => {
     e.stopPropagation();
-    const tmplId = document.getElementById('plan-preview-body')?.dataset.tmplId;
+    const tmplId = e.target.closest('#plan-preview-body')?.dataset.tmplId;
     if (!tmplId) return;
-    _editTmplId = tmplId;
-    _editTmplCopy = null;
-    _searchQuery = '';
-    _render();
+    _openPlanViewer(tmplId);
   });
   
   // "+ X More" button toggles inline expansion
@@ -552,6 +559,101 @@ function _bindHome() {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function _t(en, ru) { return _lang === 'ru' ? ru : en; }
+
+function _getVariantMap() {
+  try { return JSON.parse(localStorage.getItem('fit_elite_template_variants') || '{}'); }
+  catch { return {}; }
+}
+
+function _saveVariant() {
+  const map = _getVariantMap();
+  map[_pplDay] = _tmplVariant;
+  localStorage.setItem('fit_elite_template_variants', JSON.stringify(map));
+}
+
+// ─── Full Plan Viewer ─────────────────────────────────────────────────────────
+
+function _openPlanViewer(tmplId) {
+  const tmpl = templates.templates[tmplId];
+  if (!tmpl) return;
+  navigator.vibrate?.([15, 50, 15]);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'sheet-overlay plan-viewer-overlay';
+  const sheet = document.createElement('div');
+  sheet.className = 'sheet sheet-plan-viewer';
+  sheet.innerHTML = `
+    <div class="plan-viewer-header">
+      <button class="sheet-close" id="pv-close">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+      <div class="plan-viewer-title">${tmpl.name}</div>
+    </div>
+    <div class="plan-viewer-search">
+      <span class="material-symbols-outlined search-ico">search</span>
+      <input class="search-input" id="pv-search" type="text" placeholder="${_t('Search exercises…', 'Поиск упражнений…')}" autocomplete="off"/>
+    </div>
+    <div class="plan-viewer-body" id="pv-body"></div>
+    <div class="plan-viewer-footer">
+      <button class="sheet-start" id="pv-start">
+        <span class="material-symbols-outlined fi" style="font-size:15px">play_arrow</span>
+        ${_t('Start Training', 'Начать тренировку')}
+      </button>
+    </div>
+  `;
+
+  _el.appendChild(overlay);
+  _el.appendChild(sheet);
+  requestAnimationFrame(() => { overlay.classList.add('open'); sheet.classList.add('open'); });
+
+  const body = sheet.querySelector('#pv-body');
+  const inp  = sheet.querySelector('#pv-search');
+
+  const render = (q) => {
+    const groups = _searchInTemplate(tmpl, q || '');
+    body.innerHTML = groups.map(mg => {
+      const exHtml = mg.exercises.map(ex => {
+        const def = templates.exercises[ex.exercise_id];
+        const name = _lang === 'ru' ? def?.name_ru || def?.name : def?.name;
+        return `<div class="ex-row"><span class="ex-dot"></span><div class="ex-info"><div class="ex-name">${name ?? ex.exercise_id}</div><div class="ex-meta">${ex.sets}×${ex.reps ?? `${ex.duration_sec}s`} ${def?.equipment ? `· ${def.equipment}` : ''}</div></div></div>`;
+      }).join('');
+      return `<div class="mg-block"><div class="mg-block-hdr">${mg.name}</div>${exHtml}</div>`;
+    }).join('');
+  };
+
+  render('');
+  inp.addEventListener('input', e => render(e.target.value.trim()));
+
+  const closeFn = () => {
+    overlay.classList.remove('open');
+    sheet.classList.remove('open');
+    setTimeout(() => { overlay.remove(); sheet.remove(); }, 300);
+  };
+  overlay.addEventListener('click', closeFn);
+  sheet.querySelector('#pv-close').addEventListener('click', closeFn);
+  sheet.querySelector('#pv-start').addEventListener('click', () => {
+    closeFn();
+    bus.emit('nav:switch', { screen: 'train' });
+    setTimeout(() => session.start(tmplId), 80);
+  });
+}
+
+function _searchInTemplate(tmpl, query) {
+  const q = query.toLowerCase();
+  return tmpl.muscle_groups
+    .map(mg => ({
+      ...mg,
+      exercises: mg.exercises.filter(ex => {
+        const def = templates.exercises[ex.exercise_id];
+        if (!q) return true;
+        const name = (def?.name || '').toLowerCase();
+        const nameRu = (def?.name_ru || '').toLowerCase();
+        const muscles = (def?.muscles || []).join(' ').toLowerCase();
+        return name.includes(q) || nameRu.includes(q) || muscles.includes(q);
+      })
+    }))
+    .filter(mg => mg.exercises.length > 0);
+}
 
 // ─── Template Editor ────────────────────────────────────────────────────────
 

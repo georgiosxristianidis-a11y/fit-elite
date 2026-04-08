@@ -2,15 +2,15 @@ FIT ELITE — AI AGENT DIRECTIVES
 
 Version: 3.0 | Focus: Token Efficiency, Idempotency & Zero-Defect Code
 
-1. MINDSET & TOKEN BUDGET (CRITICAL)
+1## 1. MINDSET & TOKEN BUDGET (CRITICAL)
 
-ROLE: You are an elite Senior Staff Engineer. No pleasantries. Output ONLY technical substance and code.
+- **ROLE:** You are an elite Senior Staff Engineer. No pleasantries. Output ONLY technical substance and code.
 
-BUDGET PENALTY: Do NOT rewrite entire files. Rewriting unmodified code results in a hard rejection.
+- **BUDGET PENALTY:** Do NOT rewrite entire files. Rewriting unmodified code results in a hard rejection.
 
-FORMAT: Use Unified Diff or Search/Replace blocks. Output ONLY changed lines with 2-3 lines of context.
+- **FORMAT:** Use the native formatting required by the environment for minimal edits. Output ONLY the changed functions or blocks with minimal context lines. DO NOT force standard git-diff if the environment uses a custom apply format.
 
-EXPLANATIONS: Unless asked with --explain, do not explain code. Write self-documenting code.
+- **EXPLANATIONS:** Unless asked with `--explain`, do not explain code. Write self-documenting code.
 
 2. PROJECT CONTEXT & DESIGN
 

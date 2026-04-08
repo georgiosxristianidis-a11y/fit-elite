@@ -21,6 +21,7 @@
 import session, { STATE } from '../core/session.js';
 import { bus } from '../core/bus.js';
 import templates from '../data/templates.json' with { type: 'json' };
+import db from '../core/db.js';
 import units from '../core/units.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -61,6 +62,9 @@ let _setDraftIsWeighted = false;
 
 // C-3 Fix: in-memory workouts cache (invalidated on session:saved)
 let _workoutsCache = null;
+
+// M-1: custom templates cache (invalidated on template save/delete)
+let _customTemplatesCache = null;
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
@@ -106,6 +110,13 @@ function _unbindBus() {
 function _onSessionSaved() {
   _workoutsCache = null;
   _render();
+}
+
+async function _getCachedCustomTemplates() {
+  if (_customTemplatesCache === null) {
+    _customTemplatesCache = await db.getCustomTemplates();
+  }
+  return _customTemplatesCache ?? [];
 }
 
 // Get workouts with simple module-level cache (invalidated above)
@@ -246,6 +257,7 @@ function _renderPPLCards() {
           </div>
         `;
       }).join('')}
+      ${_renderCustomTemplateCards()}
       <div class="ppl-card ppl-card-add" id="add-custom-template">
         <div class="ppl-card-icon-add">
           <span class="material-symbols-outlined" style="font-size:28px; color:var(--t3)">add</span>
@@ -257,18 +269,19 @@ function _renderPPLCards() {
 }
 
 function _renderExerciseList() {
+  // Browse mode — no flat list, only PPL cards
+  if (!_searchQuery) return '';
+
   const exList = Object.values(templates.exercises);
   let filtered = exList;
 
   // Filter by search
-  if (_searchQuery) {
-    const q = _searchQuery.toLowerCase();
-    filtered = filtered.filter(e =>
-      e.name.toLowerCase().includes(q) ||
-      e.name_ru.toLowerCase().includes(q) ||
-      e.muscles.some(m => m.includes(q))
-    );
-  }
+  const q = _searchQuery.toLowerCase();
+  filtered = filtered.filter(e =>
+    e.name.toLowerCase().includes(q) ||
+    e.name_ru.toLowerCase().includes(q) ||
+    e.muscles.some(m => m.includes(q))
+  );
 
   // Filter by chip
   if (_activeChip !== 'all') {
@@ -287,65 +300,80 @@ function _renderExerciseList() {
     return `<div class="empty-state">${_t('No exercises found', 'Упражнения не найдены')}</div>`;
   }
 
-  const byGroup = { push:[], pull:[], legs:[], core:[], other:[] };
+  // Group by primary muscle
+  const byMuscle = {};
   filtered.forEach(e => {
-    let mg = e.muscles?.[0] || 'other';
-    let grp = 'other';
-    if (['chest','triceps','front_delt','side_delt'].includes(mg)) grp = 'push';
-    else if (['back','rear_delt','biceps','traps'].includes(mg)) grp = 'pull';
-    else if (['quads','hamstrings','glutes','calves','adductors','abductors'].includes(mg)) grp = 'legs';
-    else if (['core'].includes(mg)) grp = 'core';
-    byGroup[grp].push(e);
+    const muscle = e.muscles?.[0] || 'other';
+    if (!byMuscle[muscle]) byMuscle[muscle] = [];
+    byMuscle[muscle].push(e);
   });
 
-  const order = ['push', 'pull', 'legs', 'core', 'other'];
-  
-  let html = `<div class="section-lbl">${_t('Exercises', 'Упражнения')} <span style="color:var(--t3);font-weight:400">${filtered.length}</span></div><div class="ex-list">`;
-  
-  for (const g of order) {
-    const list = byGroup[g];
-    if (!list.length) continue;
-    const gName = g === 'push' ? _t('Push','Пуш') : g === 'pull' ? _t('Pull','Пул') : g === 'legs' ? _t('Legs','Ноги') : g === 'core' ? _t('Core','Кор') : _t('Other','Другое');
-    
-    const isExpanded = _searchExpanded[g] || _searchQuery.length > 0;
-    
-    html += `<div class="search-group-hdr tgt-grp" data-grp="${g}" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer; user-select:none">
-               ${gName}
-               <span class="material-symbols-outlined" style="font-size:18px; transition:transform var(--tb)">${isExpanded ? 'expand_less' : 'expand_more'}</span>
-             </div>`;
-             
-    if (isExpanded) {
-      html += `<div style="animation: fade-in var(--tb) var(--e1)">`;
-      html += list.map(e => {
-        const color = PPL_COLOR[g] || 'var(--t3)';
-        return `
-          <div class="ex-item" data-ex="${e.id}">
-            <div class="ex-item-bar" style="background:${color}"></div>
-            <div class="ex-item-body">
-              <div class="ex-item-name">${_lang === 'ru' ? e.name_ru : e.name}</div>
-              <div class="ex-item-meta">${e.muscles.join(' · ')} · ${e.equipment}</div>
-            </div>
-            ${e.weighted_toggle ? `<span class="material-symbols-outlined ex-item-tag" title="Weighted">fitness_center</span>` : ''}
-            ${e.timed ? `<span class="material-symbols-outlined ex-item-tag" title="Timed">timer</span>` : ''}
+  let html = `<div class="ex-list">`;
+  for (const [muscle, list] of Object.entries(byMuscle)) {
+    const muscleName = _t(muscle.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()), muscle);
+    html += `<div class="mg-block"><div class="mg-block-hdr">${muscleName}</div>`;
+    html += list.map(e => {
+      const color = 'var(--t3)';
+      return `
+        <div class="ex-item" data-ex="${e.id}">
+          <div class="ex-item-bar" style="background:${color}"></div>
+          <div class="ex-item-body">
+            <div class="ex-item-name">${_lang === 'ru' ? e.name_ru : e.name}</div>
+            <div class="ex-item-meta">${e.muscles.join(' · ')} · ${e.equipment}</div>
           </div>
-        `;
-      }).join('');
-      html += `</div>`;
-    }
+          ${e.weighted_toggle ? `<span class="material-symbols-outlined ex-item-tag" title="Weighted">fitness_center</span>` : ''}
+          ${e.timed ? `<span class="material-symbols-outlined ex-item-tag" title="Timed">timer</span>` : ''}
+        </div>
+      `;
+    }).join('');
+    html += `</div>`;
   }
   html += `</div>`;
   return html;
 }
 
+// ─── Custom Template Cards ────────────────────────────────────────────────────
+
+function _renderCustomTemplateCards() {
+  if (!_customTemplatesCache || _customTemplatesCache.length === 0) return '';
+
+  return _customTemplatesCache.map(tmpl => {
+    const exerciseCount = tmpl.muscle_groups?.reduce((a, mg) => a + (mg.exercises?.length || 0), 0) || 0;
+    return `
+      <div class="ppl-card ppl-card-custom" data-custom-id="${tmpl.id}"
+           style="background:linear-gradient(135deg, rgba(0,200,110,0.10) 0%, rgba(0,200,110,0.03) 100%); border-color:rgba(0,200,110,0.35)">
+        <div class="ppl-card-header">
+          <button class="custom-del" data-custom-del="${tmpl.id}" title="${_t('Delete', 'Удалить')}">
+            <span class="material-symbols-outlined" style="font-size:16px; color:var(--t3)">close</span>
+          </button>
+        </div>
+        <div class="ppl-card-name" style="color:var(--p); font-size:.875rem; font-weight:700">${_esc(tmpl.name)}</div>
+        <div class="ppl-card-sub">${exerciseCount} ${_t('exercises', 'упр.')}</div>
+      </div>
+    `;
+  }).join('');
+}
+
 // ─── Bottom sheet (Today's Plan) ─────────────────────────────────────────────
 
 let _sheetTemplateId = null;
+let _sheetCustomData = null;
 
 function _renderBottomSheet() {
-  if (!_sheetTemplateId) return '';
-  const t = templates.templates[_sheetTemplateId];
-  if (!t) return '';
-  const color = PPL_COLOR[t.type];
+  if (!_sheetTemplateId && !_sheetCustomData) return '';
+
+  let t, color, isCustom;
+  if (_sheetCustomData) {
+    isCustom = true;
+    t = _sheetCustomData;
+    color = 'var(--p)';
+  } else {
+    isCustom = false;
+    t = templates.templates[_sheetTemplateId];
+    if (!t) return '';
+    color = PPL_COLOR[t.type];
+  }
+
   let idx = 0;
 
   return `
@@ -354,8 +382,8 @@ function _renderBottomSheet() {
       <div class="sheet-handle"></div>
       <div class="sheet-header">
         <div>
-          <div class="sheet-title">${t.name}</div>
-          <div class="sheet-sub" style="color:${color}">${_t(t.subtitle, t.subtitle_ru)}</div>
+          <div class="sheet-title">${_esc(t.name)}</div>
+          <div class="sheet-sub" style="color:${color}">${_t(t.subtitle || '', t.subtitle_ru || '')}</div>
         </div>
         <button class="sheet-close" id="sheet-close">
           <span class="material-symbols-outlined">close</span>
@@ -368,7 +396,7 @@ function _renderBottomSheet() {
             ${mg.exercises.map(ex => {
               idx++;
               const def = templates.exercises[ex.exercise_id];
-              const name = _lang === 'ru' ? def?.name_ru : def?.name;
+              const name = _lang === 'ru' && def?.name_ru ? def.name_ru : (def?.name ?? ex.exercise_id);
               const repsLabel = ex.duration_sec
                 ? `${ex.sets}×${ex.duration_sec}s`
                 : `${ex.sets}×${ex.reps}`;
@@ -376,7 +404,7 @@ function _renderBottomSheet() {
                 <div class="sheet-ex">
                   <span class="sheet-ex-num">${String(idx).padStart(2,'0')}</span>
                   <div class="sheet-ex-info">
-                    <div class="sheet-ex-name">${name ?? ex.exercise_id}</div>
+                    <div class="sheet-ex-name">${name}</div>
                     <div class="sheet-ex-meta">${repsLabel}${ex.rotation ? ` · <span class="rotation-tag">${ex.rotation.label}</span>` : ''}${ex.weighted_toggle ? ` · <span class="weighted-tag">${_t('Weighted', 'Утяжелённый')}</span>` : ''}</div>
                   </div>
                 </div>
@@ -386,7 +414,7 @@ function _renderBottomSheet() {
         `).join('')}
       </div>
       <div class="sheet-actions">
-        <button class="sheet-start" id="sheet-start" style="background:${color === 'var(--pushL)' ? 'var(--push)' : color === 'var(--pullL)' ? 'var(--pull)' : 'var(--legs)'}">
+        <button class="sheet-start" id="sheet-start" style="background:${isCustom ? 'var(--p)' : (color === 'var(--pushL)' ? 'var(--push)' : color === 'var(--pullL)' ? 'var(--pull)' : 'var(--legs)')}">
           <span class="material-symbols-outlined fi">play_arrow</span>
           ${_t('Start Workout', 'Начать тренировку')}
         </button>
@@ -403,6 +431,20 @@ function _bindBrowse() {
     el.addEventListener('click', () => {
       const tmplType = el.dataset.tmpl; // push, pull, legs
       _openPPLSheet(tmplType);
+    });
+  });
+
+  // Custom template cards
+  _el.querySelectorAll('.ppl-card-custom').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = el.dataset.customId;
+      _openCustomSheet(id);
+    });
+  });
+  _el.querySelectorAll('.custom-del').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await _deleteCustomTemplate(btn.dataset.customDel);
     });
   });
 
@@ -547,12 +589,19 @@ function _closeTemplateBuilder() {
   }, 300);
 }
 
-function _saveCustomTemplate(exerciseIds) {
-  // Generate template name
+async function _saveCustomTemplate(exerciseIds) {
   const templateName = prompt(_t('Enter template name:', 'Название шаблона:'), 'My Custom Workout');
   if (!templateName) return;
 
-  // Create template object
+  // Group exercises by primary muscle for muscle_groups structure
+  const byMuscle = {};
+  for (const exId of exerciseIds) {
+    const ex = templates.exercises[exId];
+    const muscle = ex?.muscles?.[0] || 'other';
+    if (!byMuscle[muscle]) byMuscle[muscle] = [];
+    byMuscle[muscle].push({ exercise_id: exId, sets: 3, reps: 10, rotation: null });
+  }
+
   const newTemplate = {
     id: 'custom_' + Date.now(),
     name: templateName,
@@ -560,27 +609,17 @@ function _saveCustomTemplate(exerciseIds) {
     type: 'custom',
     subtitle: 'Custom template',
     subtitle_ru: 'Пользовательский',
-    muscle_groups: exerciseIds.map(exId => {
-      const ex = templates.exercises[exId];
-      return {
-        id: ex?.muscles?.[0] || 'other',
-        name: ex?.muscles?.[0] || 'Other',
-        name_ru: ex?.muscles?.[0] || 'Other',
-        exercises: [{ exercise_id: exId, sets: 3, reps: 10, rotation: null }]
-      };
-    })
+    muscle_groups: Object.entries(byMuscle).map(([muscle, exs]) => ({
+      id: muscle, name: muscle, name_ru: muscle, exercises: exs
+    })),
+    created_at: new Date().toISOString()
   };
 
-  // Save to localStorage
-  const customTemplates = JSON.parse(localStorage.getItem('fit_elite_custom_templates') || '[]');
-  customTemplates.push(newTemplate);
-  localStorage.setItem('fit_elite_custom_templates', JSON.stringify(customTemplates));
-
+  await db.saveCustomTemplate(newTemplate);
+  _customTemplatesCache = null;
   _closeTemplateBuilder();
-  _showToast(_t('Template saved! You can find it in Train tab', 'Шаблон сохранён!'), 'ok');
-
-  // Re-render to show new template
-  setTimeout(() => _renderBrowse(), 500);
+  _showToast(_t('Template saved!', 'Шаблон сохранён!'), 'ok');
+  setTimeout(() => _renderBrowse(), 300);
 }
 
 function _bindSheet() {

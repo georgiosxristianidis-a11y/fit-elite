@@ -14,7 +14,7 @@ import { enqueue } from './sync.js';
  */
 
 const DB_NAME    = 'fit_elite';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 // ─── Open ────────────────────────────────────────────────────────────────────
 
@@ -43,6 +43,10 @@ function open() {
       if (!db.objectStoreNames.contains('sync_queue')) {
         const sq = db.createObjectStore('sync_queue', { keyPath: 'id' });
         sq.createIndex('by_created', 'created_at');
+      }
+
+      if (!db.objectStoreNames.contains('custom_templates')) {
+        db.createObjectStore('custom_templates', { keyPath: 'id' });
       }
     };
 
@@ -128,6 +132,26 @@ function getWorkoutsByType(pplType) {
   return _getAllByIndex('workouts', 'by_ppl', pplType);
 }
 
+// ─── Custom Templates ────────────────────────────────────────────────────────
+
+async function getCustomTemplates() {
+  const all = await _getAll('custom_templates');
+  return all ?? [];
+}
+
+async function saveCustomTemplate(template) {
+  const record = { ...template, updated_at: new Date().toISOString() };
+  return _put('custom_templates', record);
+}
+
+async function deleteCustomTemplate(id) {
+  return _tx('custom_templates', 'readwrite', store => store.delete(id));
+}
+
+async function clearAllCustomTemplates() {
+  return _tx('custom_templates', 'readwrite', store => store.clear());
+}
+
 // ─── Core Usage ──────────────────────────────────────────────────────────────
 
 const CORE_USAGE_KEY = 'singleton';
@@ -210,6 +234,10 @@ export const db = {
   getWorkout,
   getWorkoutsByRange,
   getWorkoutsByType,
+  getCustomTemplates,
+  saveCustomTemplate,
+  deleteCustomTemplate,
+  clearAllCustomTemplates,
   getCoreUsage,
   saveCoreUsage,
   getPersonalRecords,

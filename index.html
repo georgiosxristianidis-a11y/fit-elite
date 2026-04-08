@@ -728,8 +728,88 @@ workout-bar {
 .modal-save:hover { background:var(--p); }
 
 /* ════════════════════════════════════════════════════════════════
-   STATS SCREEN
+   TODAY'S PLAN UPGRADES — A/B toggle, collapsible groups, plan viewer
    ════════════════════════════════════════════════════════════════ */
+.ab-toggle { display:flex; gap:6px; margin-top:1px; }
+.ab-pill {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:26px; height:22px; border-radius:6px; background:var(--s3);
+  color:var(--t3); font-size:.625rem; font-weight:800; cursor:pointer;
+  border:1px solid var(--t4); transition:all .2s; user-select:none;
+}
+.ab-pill.active { background:var(--p); color:var(--s1); border-color:var(--p); }
+.ab-pill.disabled { opacity:.3; pointer-events:none; }
+
+/* collapsible muscle groups inside Today's Plan card */
+.tmpl-mg-sec { border-top:1px solid var(--s3); }
+.tmpl-mg-sec:first-child { border-top:none; }
+.tmpl-mg-hdr {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:7px 0; cursor:pointer; min-height:36px; user-select:none;
+}
+.tmpl-mg-hdr:active { opacity:.7; }
+.tmpl-mg-name { font-size:.625rem; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--t3); }
+.tmpl-mg-chevron {
+  font-size:16px; color:var(--t4); transition:transform .2s var(--e1);
+}
+.tmpl-mg-chevron.rot { transform:rotate(90deg); }
+
+.tmpl-mg-body { display:block; }
+.tmpl-mg-body.collapsed { display:none; }
+.tmpl-mg-body.expanded .ex-row { min-height:44px; }
+
+/* "View Full Plan" CTA */
+.view-full-plan {
+  display:flex; align-items:center; justify-content:center; gap:6px;
+  width:100%; padding:10px 0; border-top:1px solid var(--s3);
+  font-size:.625rem; font-weight:700; color:var(--p); letter-spacing:.04em;
+  cursor:pointer; background:transparent; border:none; border-radius:0;
+  text-transform:uppercase; transition:opacity .15s;
+}
+.view-full-plan:hover { opacity:.75; }
+
+/* scrollable exercise list inside Today's Plan card */
+.tmpl-card-scroll {
+  max-height:180px; overflow-y:auto; scrollbar-width:thin;
+  scrollbar-color:var(--s4) transparent;
+  padding:0 14px;
+}
+.tmpl-card-scroll::-webkit-scrollbar { width:3px; }
+.tmpl-card-scroll::-webkit-scrollbar-thumb { background:var(--s4); border-radius:2px; }
+
+/* full-screen plan viewer sheet */
+.sheet.sheet-plan-viewer {
+  position:fixed; inset:0; max-height:100%; border-radius:0;
+  z-index:31; transform:translateY(100%); transition:transform .3s var(--e1);
+  display:flex; flex-direction:column; background:var(--s1);
+}
+.sheet.sheet-plan-viewer.sheet-open { transform:translateY(0); }
+.sheet-overlay.plan-viewer-overlay { z-index:30 !important; }
+.plan-viewer-header {
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:16px 20px 8px; flex-shrink:0;
+}
+.plan-viewer-header .pv-close {
+  display:flex; align-items:center; justify-content:center;
+  width:36px; height:36px; border-radius:50%; background:var(--s3);
+  color:var(--t1); border:none; cursor:pointer; flex-shrink:0;
+}
+.plan-viewer-title { font-size:.875rem; font-weight:800; color:var(--t1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.plan-viewer-search { padding:0 20px 10px; flex-shrink:0; }
+.plan-viewer-body { flex:1; overflow-y:auto; padding:0 20px 16px; }
+.plan-viewer-footer {
+  padding:12px 20px 28px; flex-shrink:0; border-top:1px solid var(--s3);
+}
+
+/* muscle group blocks for search results (train.js) */
+.mg-block {
+  margin-bottom:14px;
+}
+.mg-block-hdr {
+  font-size:.5625rem; font-weight:800; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--t3); padding:4px 0 8px; border-bottom:1px solid var(--s3);
+  margin-bottom:4px;
+}
 .stats-top   { padding:24px 20px 0; }
 .stats-title { font-size:1.75rem; font-weight:900; letter-spacing:-.035em; color:var(--t1); margin-bottom:12px; }
 .tab-line { display:flex; border-bottom:1px solid var(--t4); overflow-x:auto; scrollbar-width:none; }
