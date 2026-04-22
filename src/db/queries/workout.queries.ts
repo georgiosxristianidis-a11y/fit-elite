@@ -8,7 +8,7 @@ import type {
 } from '@/types/workout.types'
 
 export async function createWorkout(): Promise<number> {
-  return db.workouts.add({ startedAt: new Date() })
+  return (await db.workouts.add({ startedAt: new Date() })) as number
 }
 
 export async function endWorkout(id: number): Promise<void> {
@@ -54,7 +54,7 @@ export async function addExerciseToWorkout(
   exerciseId: number
 ): Promise<number> {
   const count = await db.exerciseEntries.where('workoutId').equals(workoutId).count()
-  return db.exerciseEntries.add({ workoutId, exerciseId, order: count })
+  return (await db.exerciseEntries.add({ workoutId, exerciseId, order: count })) as number
 }
 
 export async function logSet(
@@ -63,14 +63,14 @@ export async function logSet(
   weight: number,
   setType: SetType = 'working'
 ): Promise<number> {
-  return db.sets.add({
+  return (await db.sets.add({
     exerciseEntryId,
     reps,
     weight,
     setType,
     completed: true,
     createdAt: new Date(),
-  })
+  })) as number
 }
 
 export async function deleteSet(setId: number): Promise<void> {

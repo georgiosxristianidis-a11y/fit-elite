@@ -23,5 +23,5 @@ export async function searchExercises(query: string): Promise<Exercise[]> {
 export async function addCustomExercise(
   data: Omit<Exercise, 'id' | 'isCustom'>
 ): Promise<number> {
-  return db.exercises.add({ ...data, isCustom: true })
+  return (await db.exercises.add({ ...data, isCustom: true })) as number
 }
