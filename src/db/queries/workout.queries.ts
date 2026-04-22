@@ -1,0 +1,130 @@
+import { db } from '@/db/schema'
+import { checkAndSavePR } from '@/db/queries/pr.queries'
+import type {
+  Workout,
+  WorkoutWithEntries,
+  ExerciseEntryWithSets,
+  SetType,
+} from '@/types/workout.types'
+
+export async function createWorkout(): Promise<number> {
+  return (await db.workouts.add({ startedAt: new Date() })) as number
+}
+
+export async function endWorkout(id: number): Promise<void> {
+  await db.workouts.update(id, { endedAt: new Date() })
+  const settings = await db.settings.toCollection().first()
+  if (settings?.id) {
+    await db.settings.update(settings.id, {
+      sessionsCount: (settings.sessionsCount ?? 0) + 1,
+    })
+  }
+}
+
+export async function getRecentWorkouts(limit = 20): Promise<Workout[]> {
+  return db.workouts.orderBy('startedAt').reverse().limit(limit).toArray()
+}
+
+export async function getWorkoutWithEntries(
+  workoutId: number
+): Promise<WorkoutWithEntries | undefined> {
+  const workout = await db.workouts.get(workoutId)
+  if (!workout) return undefined
+
+  const entries = await db.exerciseEntries
+    .where('workoutId')
+    .equals(workoutId)
+    .sortBy('order')
+
+  const entriesWithSets: ExerciseEntryWithSets[] = await Promise.all(
+    entries.map(async (entry) => {
+      const [exercise, sets] = await Promise.all([
+        db.exercises.get(entry.exerciseId),
+        db.sets.where('exerciseEntryId').equals(entry.id!).sortBy('createdAt'),
+      ])
+      return { ...entry, exercise: exercise!, sets }
+    })
+  )
+
+  return { ...workout, entries: entriesWithSets }
+}
+
+export async function addExerciseToWorkout(
+  workoutId: number,
+  exerciseId: number
+): Promise<number> {
+  const count = await db.exerciseEntries.where('workoutId').equals(workoutId).count()
+  return (await db.exerciseEntries.add({ workoutId, exerciseId, order: count })) as number
+}
+
+export async function logSet(
+  exerciseEntryId: number,
+  reps: number,
+  weight: number,
+  setType: SetType = 'working'
+): Promise<number> {
+  return (await db.sets.add({
+    exerciseEntryId,
+    reps,
+    weight,
+    setType,
+    completed: true,
+    createdAt: new Date(),
+  })) as number
+}
+
+export async function deleteSet(setId: number): Promise<void> {
+  await db.sets.delete(setId)
+}
+
+/** Deletes a workout and all its child exercise entries and sets. */
+export async function deleteWorkout(workoutId: number): Promise<void> {
+  const entries = await db.exerciseEntries.where('workoutId').equals(workoutId).toArray()
+  const entryIds = entries.map((e) => e.id!)
+  const sets = await db.sets.where('exerciseEntryId').anyOf(entryIds).toArray()
+  await db.sets.bulkDelete(sets.map((s) => s.id!))
+  await db.exerciseEntries.bulkDelete(entryIds)
+  await db.workouts.delete(workoutId)
+}
+
+export async function getWeeklyWorkoutCount(): Promise<number> {
+  const weekAgo = new Date()
+  weekAgo.setDate(weekAgo.getDate() - 7)
+  return db.workouts
+    .where('startedAt')
+    .above(weekAgo)
+    .filter((w) => w.endedAt !== undefined)
+    .count()
+}
+
+export async function getTotalVolumeForWorkout(workoutId: number): Promise<number> {
+  const entries = await db.exerciseEntries.where('workoutId').equals(workoutId).toArray()
+  let total = 0
+  for (const entry of entries) {
+    const sets = await db.sets.where('exerciseEntryId').equals(entry.id!).toArray()
+    for (const set of sets) {
+      if (set.completed) total += set.reps * set.weight
+    }
+  }
+  return total
+}
+
+export async function getCompletedWorkoutsCount(): Promise<number> {
+  return db.workouts.filter((w) => w.endedAt !== undefined).count()
+}
+
+/**
+ * Logs a set and immediately checks whether it is a new PR.
+ * Returns both the new set ID and a boolean indicating a PR was set.
+ */
+export async function logSetWithPRCheck(
+  exerciseEntryId: number,
+  exerciseId: number,
+  reps: number,
+  weight: number,
+  setType: SetType = 'working'
+): Promise<{ setId: number; isPR: boolean }> {
+  const setId = await logSet(exerciseEntryId, reps, weight, setType)
+  const isPR = setType !== 'warmup' ? await checkAndSavePR(exerciseId, reps, weight, setId) : false
+  return { setId, isPR }
+}

@@ -1,0 +1,11 @@
+name = "fit-elite"
+compatibility_date = "2025-01-01"
+
+# Serve the Vite production build as static assets.
+# Cloudflare Workers Assets handles SPA routing automatically
+# (serves index.html for any path that doesn't match a file).
+[assets]
+directory = "./dist"
+
+[build]
+command = "pnpm build"
