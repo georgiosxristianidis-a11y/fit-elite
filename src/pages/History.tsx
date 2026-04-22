@@ -4,24 +4,9 @@ import { TopBar } from '@/components/layout/TopBar'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { Card } from '@/components/ui/Card'
 import { getRecentWorkouts } from '@/db/queries/workout.queries'
+import { formatDuration } from '@/utils/formatDuration'
+import { formatFullDate } from '@/utils/dateHelpers'
 import type { Workout } from '@/types/workout.types'
-
-function formatDuration(start: Date, end?: Date): string {
-  const ms = (end ?? new Date()).getTime() - start.getTime()
-  const totalMinutes = Math.floor(ms / 60_000)
-  const h = Math.floor(totalMinutes / 60)
-  const m = totalMinutes % 60
-  return h > 0 ? `${h}h ${m}m` : `${m}m`
-}
-
-function formatDateTime(date: Date): string {
-  return date.toLocaleDateString('en-GB', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
-}
 
 function WorkoutHistoryCard({ workout }: { workout: Workout }) {
   const navigate = useNavigate()
@@ -43,7 +28,7 @@ function WorkoutHistoryCard({ workout }: { workout: Workout }) {
             </span>
           )}
         </div>
-        <p className="text-xs text-slate-500">{formatDateTime(workout.startedAt)}</p>
+        <p className="text-xs text-slate-500">{formatFullDate(workout.startedAt)}</p>
         {isCompleted && (
           <p className="text-xs text-slate-600 mt-0.5">
             {formatDuration(workout.startedAt, workout.endedAt)}
@@ -62,7 +47,15 @@ export function History() {
     <>
       <TopBar title="History" />
       <PageContainer className="px-4 py-5">
-        {(workouts?.length ?? 0) === 0 && (
+        {workouts === undefined && (
+          <div className="space-y-2">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-16 rounded-2xl bg-slate-800 animate-pulse" />
+            ))}
+          </div>
+        )}
+
+        {workouts?.length === 0 && (
           <p className="text-center text-slate-600 text-sm py-12">
             No completed workouts yet.
           </p>

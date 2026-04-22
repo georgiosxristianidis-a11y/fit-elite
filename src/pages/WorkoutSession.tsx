@@ -12,30 +12,37 @@ import { useSettingsStore } from '@/store/settingsStore'
 import {
   getWorkoutWithEntries,
   addExerciseToWorkout,
-  logSet,
+  logSetWithPRCheck,
   deleteSet,
 } from '@/db/queries/workout.queries'
 import { getAllExercises } from '@/db/queries/exercise.queries'
+import { useToast } from '@/hooks/useToast'
 import type { ExerciseEntryWithSets } from '@/types/workout.types'
 
 // ─── Set logger form ─────────────────────────────────────────────────────────
 
 interface SetFormProps {
   entryId: number
+  exerciseId: number
+  exerciseName: string
   weightUnit: string
   onLogged: () => void
   onRestTimerStart: () => void
 }
 
-function SetForm({ entryId, weightUnit, onLogged, onRestTimerStart }: SetFormProps) {
+function SetForm({ entryId, exerciseId, exerciseName, weightUnit, onLogged, onRestTimerStart }: SetFormProps) {
   const [reps, setReps] = useState('8')
   const [weight, setWeight] = useState('60')
+  const { addToast } = useToast()
 
   const handleLog = async () => {
     const r = parseInt(reps, 10)
     const w = parseFloat(weight)
     if (!r || !w || r <= 0 || w < 0) return
-    await logSet(entryId, r, w)
+    const { isPR } = await logSetWithPRCheck(entryId, exerciseId, r, w)
+    if (isPR) {
+      addToast(`${exerciseName} — ${w} ${weightUnit} × ${r} reps`, 'pr')
+    }
     onLogged()
     onRestTimerStart()
   }
@@ -121,6 +128,8 @@ function ExerciseCard({
 
       <SetForm
         entryId={entry.id!}
+        exerciseId={entry.exerciseId}
+        exerciseName={entry.exercise.name}
         weightUnit={weightUnit}
         onLogged={onSetLogged}
         onRestTimerStart={onRestTimerStart}

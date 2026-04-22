@@ -6,6 +6,7 @@ import { ToastList } from '@/components/ui/ToastList'
 import { Dashboard } from '@/pages/Dashboard'
 import { WorkoutSession } from '@/pages/WorkoutSession'
 import { History } from '@/pages/History'
+import { WorkoutDetail } from '@/pages/WorkoutDetail'
 import { Exercises } from '@/pages/Exercises'
 import { Settings } from '@/pages/Settings'
 import { useSettingsStore } from '@/store/settingsStore'
@@ -33,7 +34,7 @@ export function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/workout" element={<WorkoutSession />} />
             <Route path="/history" element={<History />} />
-            <Route path="/history/:id" element={<History />} />
+            <Route path="/history/:id" element={<WorkoutDetail />} />
             <Route path="/exercises" element={<Exercises />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>

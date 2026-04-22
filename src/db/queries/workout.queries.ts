@@ -1,4 +1,5 @@
 import { db } from '@/db/schema'
+import { checkAndSavePR } from '@/db/queries/pr.queries'
 import type {
   Workout,
   WorkoutWithEntries,
@@ -100,4 +101,20 @@ export async function getTotalVolumeForWorkout(workoutId: number): Promise<numbe
 
 export async function getCompletedWorkoutsCount(): Promise<number> {
   return db.workouts.filter((w) => w.endedAt !== undefined).count()
+}
+
+/**
+ * Logs a set and immediately checks whether it is a new PR.
+ * Returns both the new set ID and a boolean indicating a PR was set.
+ */
+export async function logSetWithPRCheck(
+  exerciseEntryId: number,
+  exerciseId: number,
+  reps: number,
+  weight: number,
+  setType: SetType = 'working'
+): Promise<{ setId: number; isPR: boolean }> {
+  const setId = await logSet(exerciseEntryId, reps, weight, setType)
+  const isPR = setType !== 'warmup' ? await checkAndSavePR(exerciseId, reps, weight, setId) : false
+  return { setId, isPR }
 }
