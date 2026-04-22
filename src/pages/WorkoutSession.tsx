@@ -116,7 +116,7 @@ function ExerciseCard({
   onSetLogged: () => void
   onRestTimerStart: () => void
 }) {
-  const lastSet = entry.sets.at(-1)
+  const lastSet = entry.sets[entry.sets.length - 1]
   // After a set is logged, update the form's quick-fill seed via a key.
   // key changes force the form to re-initialise its state from the new lastSet.
   const formKey = lastSet?.id ?? 'empty'
