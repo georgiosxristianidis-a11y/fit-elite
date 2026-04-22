@@ -77,6 +77,16 @@ export async function deleteSet(setId: number): Promise<void> {
   await db.sets.delete(setId)
 }
 
+/** Deletes a workout and all its child exercise entries and sets. */
+export async function deleteWorkout(workoutId: number): Promise<void> {
+  const entries = await db.exerciseEntries.where('workoutId').equals(workoutId).toArray()
+  const entryIds = entries.map((e) => e.id!)
+  const sets = await db.sets.where('exerciseEntryId').anyOf(entryIds).toArray()
+  await db.sets.bulkDelete(sets.map((s) => s.id!))
+  await db.exerciseEntries.bulkDelete(entryIds)
+  await db.workouts.delete(workoutId)
+}
+
 export async function getWeeklyWorkoutCount(): Promise<number> {
   const weekAgo = new Date()
   weekAgo.setDate(weekAgo.getDate() - 7)

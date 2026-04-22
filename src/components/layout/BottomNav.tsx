@@ -4,7 +4,7 @@ const NAV_ITEMS = [
   { to: '/', label: 'Home', icon: '⊞' },
   { to: '/workout', label: 'Workout', icon: '◎' },
   { to: '/history', label: 'History', icon: '≡' },
-  { to: '/exercises', label: 'Exercises', icon: '✦' },
+  { to: '/progress', label: 'Progress', icon: '▲' },
   { to: '/settings', label: 'Settings', icon: '⚙' },
 ] as const
 

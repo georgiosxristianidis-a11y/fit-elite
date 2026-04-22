@@ -17,7 +17,8 @@ import {
 } from '@/db/queries/workout.queries'
 import { getAllExercises } from '@/db/queries/exercise.queries'
 import { useToast } from '@/hooks/useToast'
-import type { ExerciseEntryWithSets } from '@/types/workout.types'
+import { toDisplayUnit, toStorageKg, formatWeight } from '@/utils/weightHelpers'
+import type { ExerciseEntryWithSets, WorkoutSet, WeightUnit } from '@/types/workout.types'
 
 // ─── Set logger form ─────────────────────────────────────────────────────────
 
@@ -25,25 +26,44 @@ interface SetFormProps {
   entryId: number
   exerciseId: number
   exerciseName: string
-  weightUnit: string
-  onLogged: () => void
+  weightUnit: WeightUnit
+  lastSet?: WorkoutSet
+  onLogged: (reps: number, weightKg: number) => void
   onRestTimerStart: () => void
 }
 
-function SetForm({ entryId, exerciseId, exerciseName, weightUnit, onLogged, onRestTimerStart }: SetFormProps) {
-  const [reps, setReps] = useState('8')
-  const [weight, setWeight] = useState('60')
+function SetForm({
+  entryId,
+  exerciseId,
+  exerciseName,
+  weightUnit,
+  lastSet,
+  onLogged,
+  onRestTimerStart,
+}: SetFormProps) {
+  const defaultWeight = weightUnit === 'lbs' ? '135' : '60'
+
+  const [reps, setReps] = useState(() =>
+    lastSet ? String(lastSet.reps) : '8'
+  )
+  const [weight, setWeight] = useState(() => {
+    if (lastSet) return String(toDisplayUnit(lastSet.weight, weightUnit))
+    return defaultWeight
+  })
+
   const { addToast } = useToast()
 
   const handleLog = async () => {
     const r = parseInt(reps, 10)
-    const w = parseFloat(weight)
-    if (!r || !w || r <= 0 || w < 0) return
-    const { isPR } = await logSetWithPRCheck(entryId, exerciseId, r, w)
+    const wDisplay = parseFloat(weight)
+    if (!r || isNaN(wDisplay) || r <= 0 || wDisplay < 0) return
+
+    const wKg = toStorageKg(wDisplay, weightUnit)
+    const { isPR } = await logSetWithPRCheck(entryId, exerciseId, r, wKg)
     if (isPR) {
-      addToast(`${exerciseName} — ${w} ${weightUnit} × ${r} reps`, 'pr')
+      addToast(`${exerciseName} — ${formatWeight(wKg, weightUnit)} × ${r} reps`, 'pr')
     }
-    onLogged()
+    onLogged(r, wKg)
     onRestTimerStart()
   }
 
@@ -66,7 +86,7 @@ function SetForm({ entryId, exerciseId, exerciseName, weightUnit, onLogged, onRe
         <input
           type="number"
           min="0"
-          step="0.5"
+          step={weightUnit === 'lbs' ? '1' : '0.5'}
           value={weight}
           onChange={(e) => setWeight(e.target.value)}
           className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-200 text-center focus:outline-none focus:border-indigo-500 min-h-[44px]"
@@ -92,10 +112,15 @@ function ExerciseCard({
   onRestTimerStart,
 }: {
   entry: ExerciseEntryWithSets
-  weightUnit: string
+  weightUnit: WeightUnit
   onSetLogged: () => void
   onRestTimerStart: () => void
 }) {
+  const lastSet = entry.sets.at(-1)
+  // After a set is logged, update the form's quick-fill seed via a key.
+  // key changes force the form to re-initialise its state from the new lastSet.
+  const formKey = lastSet?.id ?? 'empty'
+
   return (
     <Card className="space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -103,7 +128,6 @@ function ExerciseCard({
         <Badge>{entry.exercise.muscleGroup}</Badge>
       </div>
 
-      {/* Sets logged so far */}
       {entry.sets.length > 0 && (
         <ul className="space-y-1" aria-label={`Sets for ${entry.exercise.name}`}>
           {entry.sets.map((set, i) => (
@@ -112,7 +136,7 @@ function ExerciseCard({
               className="flex items-center justify-between text-sm text-slate-400"
             >
               <span>
-                Set {i + 1} — {set.reps} reps × {set.weight} {weightUnit}
+                Set {i + 1} — {set.reps} reps × {formatWeight(set.weight, weightUnit)}
               </span>
               <button
                 onClick={() => deleteSet(set.id!).then(onSetLogged)}
@@ -127,10 +151,12 @@ function ExerciseCard({
       )}
 
       <SetForm
+        key={String(formKey)}
         entryId={entry.id!}
         exerciseId={entry.exerciseId}
         exerciseName={entry.exercise.name}
         weightUnit={weightUnit}
+        lastSet={lastSet}
         onLogged={onSetLogged}
         onRestTimerStart={onRestTimerStart}
       />

@@ -5,17 +5,18 @@ import { PageContainer } from '@/components/layout/PageContainer'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { getWorkoutWithEntries, getTotalVolumeForWorkout } from '@/db/queries/workout.queries'
+import { getWorkoutWithEntries, getTotalVolumeForWorkout, deleteWorkout } from '@/db/queries/workout.queries'
 import { getPRSetIds } from '@/db/queries/pr.queries'
 import { useSettingsStore } from '@/store/settingsStore'
 import { formatDuration } from '@/utils/formatDuration'
 import { formatFullDate } from '@/utils/dateHelpers'
-import type { ExerciseEntryWithSets } from '@/types/workout.types'
+import { formatWeight, toDisplayUnit } from '@/utils/weightHelpers'
+import type { ExerciseEntryWithSets, WeightUnit } from '@/types/workout.types'
 
 interface ExerciseDetailCardProps {
   entry: ExerciseEntryWithSets
   prSetIds: Set<number>
-  weightUnit: string
+  weightUnit: WeightUnit
 }
 
 function ExerciseDetailCard({ entry, prSetIds, weightUnit }: ExerciseDetailCardProps) {
@@ -44,7 +45,7 @@ function ExerciseDetailCard({ entry, prSetIds, weightUnit }: ExerciseDetailCardP
               {set.setType === 'warmup' ? 'W' : `Set ${i + 1}`}
             </span>
             <span className="text-slate-300 flex-1">
-              {set.reps} reps × {set.weight} {weightUnit}
+              {set.reps} reps × {formatWeight(set.weight, weightUnit)}
             </span>
             {prSetIds.has(set.id!) && (
               <span
@@ -60,7 +61,7 @@ function ExerciseDetailCard({ entry, prSetIds, weightUnit }: ExerciseDetailCardP
 
       {totalVolume > 0 && (
         <p className="text-xs text-slate-600 pt-1 border-t border-slate-700">
-          Volume: {totalVolume.toLocaleString()} {weightUnit}
+          Volume: {toDisplayUnit(totalVolume, weightUnit).toLocaleString()} {weightUnit}
         </p>
       )}
     </Card>
@@ -71,7 +72,16 @@ export function WorkoutDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { weightUnit } = useSettingsStore()
+
   const workoutId = id ? parseInt(id, 10) : null
+
+  const handleDelete = async () => {
+    if (!workoutId || isNaN(workoutId)) return
+    const confirmed = window.confirm('Delete this workout? This cannot be undone.')
+    if (!confirmed) return
+    await deleteWorkout(workoutId)
+    navigate('/history')
+  }
 
   const workout = useLiveQuery(
     () => (workoutId ? getWorkoutWithEntries(workoutId) : undefined),
@@ -118,9 +128,14 @@ export function WorkoutDetail() {
       <TopBar
         title={workout.name ?? formatFullDate(workout.startedAt)}
         right={
-          <Button variant="ghost" size="sm" onClick={() => navigate('/history')}>
-            ← Back
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/history')}>
+              ← Back
+            </Button>
+            <Button variant="danger" size="sm" onClick={handleDelete} aria-label="Delete workout">
+              Delete
+            </Button>
+          </div>
         }
       />
       <PageContainer className="px-4 py-5 space-y-4">
@@ -132,9 +147,9 @@ export function WorkoutDetail() {
           </div>
           <div className="bg-slate-800 rounded-2xl p-3 text-center border border-slate-700">
             <p className="text-lg font-bold text-indigo-400">
-              {(totalVolume ?? 0).toLocaleString()}
+              {toDisplayUnit(totalVolume ?? 0, weightUnit).toLocaleString()}
             </p>
-            <p className="text-xs text-slate-500 mt-0.5">Volume {weightUnit}</p>
+            <p className="text-xs text-slate-500 mt-0.5">Vol. {weightUnit}</p>
           </div>
           <div className="bg-slate-800 rounded-2xl p-3 text-center border border-slate-700">
             <p className="text-lg font-bold text-indigo-400">

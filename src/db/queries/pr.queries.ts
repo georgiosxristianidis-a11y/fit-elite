@@ -51,3 +51,19 @@ export async function getPRSetIds(): Promise<Set<number>> {
 export async function getAllPRs(): Promise<PR[]> {
   return db.prs.orderBy('achievedAt').reverse().toArray()
 }
+
+export interface PRWithExercise extends PR {
+  exerciseName: string
+}
+
+/** All PRs joined with their exercise names, sorted by exercise name then rep count. */
+export async function getAllPRsWithExercises(): Promise<PRWithExercise[]> {
+  const prs = await db.prs.toArray()
+  const exerciseIds = [...new Set(prs.map((pr) => pr.exerciseId))]
+  const exercises = await db.exercises.bulkGet(exerciseIds)
+  const nameMap = new Map(exercises.map((ex) => [ex?.id, ex?.name ?? 'Unknown']))
+
+  return prs
+    .map((pr) => ({ ...pr, exerciseName: nameMap.get(pr.exerciseId) ?? 'Unknown' }))
+    .sort((a, b) => a.exerciseName.localeCompare(b.exerciseName) || a.reps - b.reps)
+}
