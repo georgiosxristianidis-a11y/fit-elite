@@ -6,6 +6,7 @@ import { PageContainer } from '@/components/layout/PageContainer'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { RestTimer } from '@/components/workout/RestTimer'
 import { useWorkoutSession } from '@/hooks/useWorkoutSession'
 import { useSettingsStore } from '@/store/settingsStore'
 import {
@@ -23,9 +24,10 @@ interface SetFormProps {
   entryId: number
   weightUnit: string
   onLogged: () => void
+  onRestTimerStart: () => void
 }
 
-function SetForm({ entryId, weightUnit, onLogged }: SetFormProps) {
+function SetForm({ entryId, weightUnit, onLogged, onRestTimerStart }: SetFormProps) {
   const [reps, setReps] = useState('8')
   const [weight, setWeight] = useState('60')
 
@@ -35,6 +37,7 @@ function SetForm({ entryId, weightUnit, onLogged }: SetFormProps) {
     if (!r || !w || r <= 0 || w < 0) return
     await logSet(entryId, r, w)
     onLogged()
+    onRestTimerStart()
   }
 
   return (
@@ -79,10 +82,12 @@ function ExerciseCard({
   entry,
   weightUnit,
   onSetLogged,
+  onRestTimerStart,
 }: {
   entry: ExerciseEntryWithSets
   weightUnit: string
   onSetLogged: () => void
+  onRestTimerStart: () => void
 }) {
   return (
     <Card className="space-y-3">
@@ -114,7 +119,12 @@ function ExerciseCard({
         </ul>
       )}
 
-      <SetForm entryId={entry.id!} weightUnit={weightUnit} onLogged={onSetLogged} />
+      <SetForm
+        entryId={entry.id!}
+        weightUnit={weightUnit}
+        onLogged={onSetLogged}
+        onRestTimerStart={onRestTimerStart}
+      />
     </Card>
   )
 }
@@ -179,9 +189,10 @@ function ExercisePicker({ onPick, onClose }: ExercisePickerProps) {
 
 export function WorkoutSession() {
   const { activeWorkoutId, isActive, end } = useWorkoutSession()
-  const { weightUnit } = useSettingsStore()
+  const { weightUnit, restTimerSeconds } = useSettingsStore()
   const navigate = useNavigate()
   const [showPicker, setShowPicker] = useState(false)
+  const [showRestTimer, setShowRestTimer] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
 
   const workout = useLiveQuery(
@@ -237,6 +248,7 @@ export function WorkoutSession() {
             entry={entry}
             weightUnit={weightUnit}
             onSetLogged={refresh}
+            onRestTimerStart={() => setShowRestTimer(true)}
           />
         ))}
 
@@ -249,6 +261,14 @@ export function WorkoutSession() {
           + Add exercise
         </Button>
       </PageContainer>
+
+      {showRestTimer && (
+        <RestTimer
+          durationSeconds={restTimerSeconds}
+          onComplete={() => setShowRestTimer(false)}
+          onDismiss={() => setShowRestTimer(false)}
+        />
+      )}
 
       {showPicker && (
         <ExercisePicker

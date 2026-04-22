@@ -1,11 +1,15 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { BottomNav } from '@/components/layout/BottomNav'
+import { InstallBanner } from '@/components/layout/InstallBanner'
+import { ToastList } from '@/components/ui/ToastList'
 import { Dashboard } from '@/pages/Dashboard'
 import { WorkoutSession } from '@/pages/WorkoutSession'
 import { History } from '@/pages/History'
 import { Exercises } from '@/pages/Exercises'
+import { Settings } from '@/pages/Settings'
 import { useSettingsStore } from '@/store/settingsStore'
+import { ToastProvider } from '@/context/ToastContext'
 
 export function App() {
   const setInstallPromptEvent = useSettingsStore((s) => s.setInstallPromptEvent)
@@ -22,17 +26,22 @@ export function App() {
   }, [setInstallPromptEvent])
 
   return (
-    <BrowserRouter>
-      <div className="flex flex-col h-full">
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/workout" element={<WorkoutSession />} />
-          <Route path="/history" element={<History />} />
-          <Route path="/history/:id" element={<History />} />
-          <Route path="/exercises" element={<Exercises />} />
-        </Routes>
-        <BottomNav />
-      </div>
-    </BrowserRouter>
+    <ToastProvider>
+      <BrowserRouter>
+        <div className="flex flex-col h-full">
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/workout" element={<WorkoutSession />} />
+            <Route path="/history" element={<History />} />
+            <Route path="/history/:id" element={<History />} />
+            <Route path="/exercises" element={<Exercises />} />
+            <Route path="/settings" element={<Settings />} />
+          </Routes>
+          <ToastList />
+          <InstallBanner />
+          <BottomNav />
+        </div>
+      </BrowserRouter>
+    </ToastProvider>
   )
 }

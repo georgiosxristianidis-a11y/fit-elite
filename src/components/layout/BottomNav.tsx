@@ -5,6 +5,7 @@ const NAV_ITEMS = [
   { to: '/workout', label: 'Workout', icon: '◎' },
   { to: '/history', label: 'History', icon: '≡' },
   { to: '/exercises', label: 'Exercises', icon: '✦' },
+  { to: '/settings', label: 'Settings', icon: '⚙' },
 ] as const
 
 export function BottomNav() {
